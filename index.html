@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Campus App - Producción</title>
-    <!-- Vinculación del archivo CSS externo -->
+    <title>MavPulse — UTA Campus & Commute</title>
+    <!-- External stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -37,6 +37,12 @@
                                 <button class="btn-outline btn-dismiss-alert" type="button">Dismiss</button>
                             </div>
                         </div>
+
+                        <section class="nws-alerts" aria-labelledby="nws-alerts-title">
+                            <div class="section-divider" id="nws-alerts-title">Live weather alerts</div>
+                            <div class="nws-alert-status" id="nws-alert-status" aria-live="polite">Checking for live weather alerts…</div>
+                            <div id="nws-alert-list" class="nws-alert-list"></div>
+                        </section>
 
                         <section class="dismissed-alerts" aria-labelledby="dismissed-alerts-title">
                             <div class="dismissed-alerts-header">
@@ -140,78 +146,103 @@
                         <button class="filter-chip" type="button" data-study-filter="group" aria-pressed="false">Group</button>
                         <button class="filter-chip" type="button" data-study-filter="open" aria-pressed="false">Open now</button>
                     </div>
+                    <div class="study-intro">Busyness is estimated from typical weekday patterns. If someone reports a spot, that live status is shown instead.</div>
                     <div class="view-body study-list" id="study-list">
-                        <div class="study-card" data-study-id="central-library" data-study-types="quiet" data-study-open="true">
+                        <div class="study-card" data-study-id="central-library" data-study-types="quiet" data-study-open="true" data-busyness="0.9">
                             <div class="card-header-row">
                                 <div class="card-title-main">Central Library, 6th floor</div>
                                 <div class="card-time-badge">Open until 2 AM</div>
                             </div>
                             <div class="card-subtitle-specs">Quiet · Silent zone, 40 desks, outlets at every seat</div>
                             <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill green" data-capacity="34" style="width: 34%;"></div></div>
-                                <div class="progress-label green">34% full</div>
+                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
+                                <div class="progress-label green">Estimating…</div>
                             </div>
-                            <button class="btn-action-wide btn-hold-seat" type="button" aria-pressed="false">Hold a seat</button>
+                            <div class="study-report-row">
+                                <span class="study-report-prompt">Seen it recently?</span>
+                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
+                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
+                            </div>
                         </div>
-                        <div class="study-card" data-study-id="seir-rooms" data-study-types="group" data-study-open="true">
+                        <div class="study-card" data-study-id="seir-rooms" data-study-types="group" data-study-open="true" data-busyness="1">
                             <div class="card-header-row">
                                 <div class="card-title-main">SEIR collaboration rooms</div>
                                 <div class="card-time-badge">Open until 10 PM</div>
                             </div>
                             <div class="card-subtitle-specs">Group · Bookable 90 min, whiteboard, seats 6</div>
                             <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill brown" data-capacity="78" style="width: 78%;"></div></div>
-                                <div class="progress-label brown">78% full</div>
+                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
+                                <div class="progress-label green">Estimating…</div>
                             </div>
-                            <button class="btn-action-wide btn-hold-seat" type="button" aria-pressed="false">Hold a seat</button>
+                            <div class="study-report-row">
+                                <span class="study-report-prompt">Seen it recently?</span>
+                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
+                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
+                            </div>
                         </div>
-                        <div class="study-card" data-study-id="science-engineering-library" data-study-types="quiet" data-study-open="true">
+                        <div class="study-card" data-study-id="science-engineering-library" data-study-types="quiet" data-study-open="true" data-busyness="0.8">
                             <div class="card-header-row">
                                 <div class="card-title-main">Science and Engineering Library</div>
                                 <div class="card-time-badge">Open until midnight</div>
                             </div>
                             <div class="card-subtitle-specs">Quiet · 24 desks, charging stations, window seats</div>
                             <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill green" data-capacity="51" style="width: 51%;"></div></div>
-                                <div class="progress-label green">51% full</div>
+                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
+                                <div class="progress-label green">Estimating…</div>
                             </div>
-                            <button class="btn-action-wide btn-hold-seat" type="button" aria-pressed="false">Hold a seat</button>
+                            <div class="study-report-row">
+                                <span class="study-report-prompt">Seen it recently?</span>
+                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
+                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
+                            </div>
                         </div>
-                        <div class="study-card" data-study-id="nedderman-hall" data-study-types="group" data-study-open="true">
+                        <div class="study-card" data-study-id="nedderman-hall" data-study-types="group" data-study-open="true" data-busyness="0.75">
                             <div class="card-header-row">
                                 <div class="card-title-main">Nedderman Hall</div>
                                 <div class="card-time-badge">Open until 11 PM</div>
                             </div>
                             <div class="card-subtitle-specs">Group · 32 tables, whiteboards, outlets near every wall</div>
                             <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill green" data-capacity="43" style="width: 43%;"></div></div>
-                                <div class="progress-label green">43% full</div>
+                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
+                                <div class="progress-label green">Estimating…</div>
                             </div>
-                            <button class="btn-action-wide btn-hold-seat" type="button" aria-pressed="false">Hold a seat</button>
+                            <div class="study-report-row">
+                                <span class="study-report-prompt">Seen it recently?</span>
+                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
+                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
+                            </div>
                         </div>
-                        <div class="study-card" data-study-id="life-science" data-study-types="quiet" data-study-open="true">
+                        <div class="study-card" data-study-id="life-science" data-study-types="quiet" data-study-open="true" data-busyness="0.85">
                             <div class="card-header-row">
                                 <div class="card-title-main">Life Science</div>
                                 <div class="card-time-badge">Open until 9 PM</div>
                             </div>
                             <div class="card-subtitle-specs">Quiet · 18 desks, natural light, charging lockers</div>
                             <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill green" data-capacity="62" style="width: 62%;"></div></div>
-                                <div class="progress-label green">62% full</div>
+                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
+                                <div class="progress-label green">Estimating…</div>
                             </div>
-                            <button class="btn-action-wide btn-hold-seat" type="button" aria-pressed="false">Hold a seat</button>
+                            <div class="study-report-row">
+                                <span class="study-report-prompt">Seen it recently?</span>
+                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
+                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
+                            </div>
                         </div>
-                        <div class="study-card" data-study-id="nedderman-basement-library" data-study-types="quiet" data-study-open="true">
+                        <div class="study-card" data-study-id="nedderman-basement-library" data-study-types="quiet" data-study-open="true" data-busyness="0.6">
                             <div class="card-header-row">
                                 <div class="card-title-main">Basement Library of Nedderman Hall</div>
                                 <div class="card-time-badge">Open 24 hours</div>
                             </div>
                             <div class="card-subtitle-specs">Quiet · 56 desks, low-noise zone, outlets at every seat</div>
                             <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill brown" data-capacity="29" style="width: 29%;"></div></div>
-                                <div class="progress-label brown">29% full</div>
+                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
+                                <div class="progress-label green">Estimating…</div>
                             </div>
-                            <button class="btn-action-wide btn-hold-seat" type="button" aria-pressed="false">Hold a seat</button>
+                            <div class="study-report-row">
+                                <span class="study-report-prompt">Seen it recently?</span>
+                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
+                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
+                            </div>
                         </div>
                         <p class="study-empty-state" id="study-empty-state" hidden>No study spots match these filters yet.</p>
                     </div>
@@ -343,7 +374,7 @@
         </div>
     </div>
 
-    <!-- Vinculación del archivo JavaScript externo -->
+    <!-- External JavaScript -->
     <script src="script.js"></script>
 </body>
 </html>

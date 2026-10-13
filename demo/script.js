@@ -39,6 +39,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function renderDismissedAlerts() {
+        // Guard: if the Alerts-tab elements are not on the page (e.g. the
+        // test harness loads this script without the full app markup), skip.
+        if (!savedAlertCount || !dismissedAlertList) return;
         const alerts = loadDismissedAlerts();
         savedAlertCount.textContent = alerts.length;
 
@@ -115,129 +118,7 @@ document.addEventListener("DOMContentLoaded", () => {
         window.setTimeout(() => {
             liveAlertCard.remove();
             renderDismissedAlerts();
-
-            const weatherCodeDescriptions = {
-                0: ["Clear sky", "☀️"],
-                1: ["Mainly clear", "🌤️"],
-                2: ["Partly cloudy", "⛅"],
-                3: ["Overcast", "☁️"],
-                45: ["Foggy", "🌫️"],
-                48: ["Rime fog", "🌫️"],
-                51: ["Light drizzle", "🌦️"],
-                53: ["Drizzle", "🌦️"],
-                55: ["Heavy drizzle", "🌧️"],
-                61: ["Light rain", "🌦️"],
-                63: ["Rain", "🌧️"],
-                65: ["Heavy rain", "🌧️"],
-                71: ["Light snow", "🌨️"],
-                73: ["Snow", "🌨️"],
-                75: ["Heavy snow", "❄️"],
-                80: ["Rain showers", "🌦️"],
-                81: ["Rain showers", "🌧️"],
-                82: ["Heavy showers", "⛈️"],
-                95: ["Thunderstorm", "⛈️"],
-                96: ["Thunderstorm with hail", "⛈️"],
-                99: ["Thunderstorm with hail", "⛈️"]
-            };
-
-            function setWeatherError(message) {
-                document.getElementById("weather-loading").hidden = true;
-                document.getElementById("current-weather-content").hidden = true;
-                const error = document.getElementById("weather-error");
-                error.textContent = message;
-                error.hidden = false;
-            }
-
-            async function loadWeather(coordinates) {
-                const weatherLocation = document.getElementById("weather-location");
-                const weatherUpdated = document.getElementById("weather-updated");
-                const weatherLoading = document.getElementById("weather-loading");
-                const weatherError = document.getElementById("weather-error");
-                weatherRefresh.disabled = true;
-                weatherRefresh.textContent = "Updating weather…";
-                weatherLoading.hidden = false;
-                weatherError.hidden = true;
-
-                const params = new URLSearchParams({
-                    latitude: coordinates.latitude.toString(),
-                    longitude: coordinates.longitude.toString(),
-                    current: "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m",
-                    daily: "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
-                    forecast_days: "1",
-                    timezone: "auto"
-                });
-
-                try {
-                    const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
-                    if (!response.ok) throw new Error(`Weather service returned ${response.status}.`);
-                    const data = await response.json();
-                    const current = data.current;
-                    const daily = data.daily;
-                    const [condition, icon] = weatherCodeDescriptions[current.weather_code] || ["Current conditions", "🌡️"];
-
-                    weatherLocation.textContent = `${coordinates.latitude.toFixed(3)}°, ${coordinates.longitude.toFixed(3)}°`;
-                    weatherUpdated.textContent = `Updated ${new Date(current.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · Live data`;
-                    document.getElementById("current-weather-icon").textContent = icon;
-                    document.getElementById("current-temperature").textContent = Math.round(current.temperature_2m);
-                    document.getElementById("current-condition").textContent = condition;
-                    document.getElementById("feels-like").textContent = `${Math.round(current.apparent_temperature)}°`;
-                    document.getElementById("humidity").textContent = `${current.relative_humidity_2m}%`;
-                    document.getElementById("wind-speed").textContent = `${Math.round(current.wind_speed_10m)} km/h`;
-                    document.getElementById("rain-amount").textContent = `${current.precipitation} mm`;
-                    document.getElementById("forecast-high").textContent = `${Math.round(daily.temperature_2m_max[0])}°`;
-                    document.getElementById("forecast-low").textContent = `${Math.round(daily.temperature_2m_min[0])}°`;
-                    document.getElementById("forecast-rain").textContent = `${daily.precipitation_probability_max[0]}%`;
-                    weatherLoading.hidden = true;
-                    document.getElementById("current-weather-content").hidden = false;
-                    document.getElementById("weather-metrics").hidden = false;
-                } catch (error) {
-                    console.error("Unable to load current weather.", error);
-                    setWeatherError("Live weather is temporarily unavailable. Check your connection and try again.");
-                } finally {
-                    weatherRefresh.disabled = false;
-                    weatherRefresh.textContent = "Refresh weather";
-                }
-            }
-
-            function requestWeather() {
-                if (!navigator.geolocation) {
-                    setWeatherError("Your browser does not support location services, so local weather cannot be loaded.");
-                    return;
-                }
-                weatherRefresh.disabled = true;
-                weatherRefresh.textContent = "Finding location…";
-                document.getElementById("weather-loading").hidden = false;
-                document.getElementById("current-weather-content").hidden = true;
-                document.getElementById("weather-metrics").hidden = true;
-                document.getElementById("weather-error").hidden = true;
-                if (lastWeatherCoordinates) {
-                    loadWeather(lastWeatherCoordinates);
-                    return;
-                }
-                navigator.geolocation.getCurrentPosition(
-                    position => {
-                        lastWeatherCoordinates = position.coords;
-                        loadWeather(lastWeatherCoordinates);
-                    },
-                    error => {
-                        const message = error.code === error.PERMISSION_DENIED
-                            ? "Location access was denied. Allow location access to see weather for your current location."
-                            : "We could not determine your location. Try refreshing weather again.";
-                        setWeatherError(message);
-                        weatherRefresh.disabled = false;
-                        weatherRefresh.textContent = "Refresh weather";
-                    },
-                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
-                );
-            }
-
-            if (weatherRefresh) {
-                weatherRefresh.addEventListener("click", () => {
-                    lastWeatherCoordinates = null;
-                    requestWeather();
-                });
-                requestWeather();
-            }
+            // Restore scroll position after the dismissed card is removed.
             if (mainContent) {
                 mainContent.style.overflowY = "auto";
                 mainContent.scrollTop = scrollPosition;
@@ -291,11 +172,13 @@ document.addEventListener("DOMContentLoaded", () => {
         }, 500);
     }
 
-    transitRefresh.addEventListener("click", event => {
-        event.stopPropagation();
-        refreshTransit();
-    });
-    applyTransitFilter();
+    if (transitRefresh) {
+        transitRefresh.addEventListener("click", event => {
+            event.stopPropagation();
+            refreshTransit();
+        });
+    }
+    if (transitEmpty && transitUpdated) applyTransitFilter();
 
     const mapLayerButtons = document.querySelectorAll(".filter-chip[data-layer]");
     const mapLayerState = {};
@@ -468,13 +351,14 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    const HELD_SEATS_KEY = "campus-app-held-study-seats";
+    const STUDY_REPORTS_KEY = "campus-app-study-reports";
     const studyCards = document.querySelectorAll(".study-card[data-study-id]");
     const studyFilters = document.querySelectorAll("[data-study-filter]");
     const studyEmptyState = document.getElementById("study-empty-state");
     const activeStudyFilters = new Set();
 
     function applyStudyFilters() {
+        if (!studyEmptyState) return; // Study tab not on the page (e.g. test harness).
         const categoryFilters = ["quiet", "group"].filter(filter => activeStudyFilters.has(filter));
         const requiresOpenNow = activeStudyFilters.has("open");
         let visibleCount = 0;
@@ -523,60 +407,111 @@ document.addEventListener("DOMContentLoaded", () => {
 
     applyStudyFilters();
 
-    function loadHeldSeats() {
+    // ------------------------------------------------------------------
+    //  Study-spot busyness = time-of-day ESTIMATE, overridden by a recent
+    //  crowd REPORT when one exists. There is no public live-seat feed for
+    //  campus study spaces, so we predict busyness from a typical weekday
+    //  pattern and let users crowd-report what they actually see, the same
+    //  way the app crowd-sources train crossings. Both the estimate and the
+    //  report-vs-estimate decision are pure functions, exposed for tests.
+    // ------------------------------------------------------------------
+    const LIVE_REPORT_WINDOW_MS = 60 * 60 * 1000; // a report counts as "live" for 60 minutes
+
+    // Typical weekday occupancy curve (0..1) by hour: quiet overnight,
+    // climbing through the morning to an early-afternoon peak, then easing off.
+    function typicalBusyness(hour) {
+        const curve = [
+            0.15, 0.10, 0.08, 0.05, 0.05, 0.08, 0.12, 0.20, 0.35, 0.50,
+            0.62, 0.72, 0.75, 0.82, 0.85, 0.80, 0.72, 0.60, 0.52, 0.50,
+            0.48, 0.42, 0.32, 0.22
+        ];
+        const h = ((Math.floor(hour) % 24) + 24) % 24;
+        return curve[h];
+    }
+
+    // Pure: estimated occupancy percent for a spot at a given hour.
+    // busynessFactor scales the shared curve so busier spaces read higher.
+    function estimateOccupancy(busynessFactor, hour) {
+        const pct = Math.round(typicalBusyness(hour) * Number(busynessFactor) * 100);
+        return Math.max(0, Math.min(100, pct));
+    }
+    window.estimateOccupancy = estimateOccupancy;
+
+    // Pure: decide what to show. A crowd report inside the live window wins
+    // over the estimate; otherwise fall back to the estimate.
+    function resolveStudyStatus(estimatePct, latestReport, now) {
+        if (latestReport && (now - new Date(latestReport.at).getTime()) <= LIVE_REPORT_WINDOW_MS) {
+            const pct = latestReport.status === "busy"
+                ? Math.max(estimatePct, 85)
+                : Math.min(estimatePct, 25);
+            return { source: "live", status: latestReport.status, pct };
+        }
+        return { source: "estimated", status: estimatePct >= 70 ? "busy" : "open", pct: estimatePct };
+    }
+    window.resolveStudyStatus = resolveStudyStatus;
+
+    function loadStudyReports() {
         try {
-            const heldSeats = JSON.parse(localStorage.getItem(HELD_SEATS_KEY) || "[]");
-            return Array.isArray(heldSeats) ? heldSeats : [];
+            const reports = JSON.parse(localStorage.getItem(STUDY_REPORTS_KEY) || "{}");
+            return reports && typeof reports === "object" ? reports : {};
         } catch (error) {
-            console.error("Unable to load held study seats.", error);
-            return [];
+            console.error("Unable to load study reports.", error);
+            return {};
         }
     }
 
-    function saveHeldSeats(heldSeats) {
+    function saveStudyReports(reports) {
         try {
-            localStorage.setItem(HELD_SEATS_KEY, JSON.stringify(heldSeats));
+            localStorage.setItem(STUDY_REPORTS_KEY, JSON.stringify(reports));
         } catch (error) {
-            console.error("Unable to save held study seats.", error);
+            console.error("Unable to save study reports.", error);
         }
     }
 
-    function updateStudyCard(card, isHeld) {
+    function minutesAgo(iso) {
+        const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+        if (mins <= 0) return "just now";
+        if (mins === 1) return "1 min ago";
+        return `${mins} min ago`;
+    }
+
+    function renderStudyCard(card) {
         const fill = card.querySelector(".progress-bar-fill");
         const label = card.querySelector(".progress-label");
-        const button = card.querySelector(".btn-hold-seat");
-        const baseCapacity = Number(fill.dataset.capacity);
-        const capacity = Math.min(100, baseCapacity + (isHeld ? 5 : 0));
+        if (!fill || !label) return;
 
-        fill.style.width = `${capacity}%`;
-        label.textContent = `${capacity}% full`;
-        button.classList.toggle("is-held", isHeld);
-        button.disabled = false;
-        button.setAttribute("aria-pressed", String(isHeld));
-        button.textContent = isHeld ? "✓ Release seat" : "Hold a seat";
-        card.classList.toggle("seat-reserved", isHeld);
+        const busyness = card.dataset.busyness || "0.7";
+        const estimatePct = estimateOccupancy(busyness, new Date().getHours());
+        const latestReport = loadStudyReports()[card.dataset.studyId] || null;
+        const state = resolveStudyStatus(estimatePct, latestReport, Date.now());
+
+        fill.style.width = `${state.pct}%`;
+        fill.classList.toggle("brown", state.pct >= 70);
+        fill.classList.toggle("green", state.pct < 70);
+        label.classList.toggle("brown", state.pct >= 70);
+        label.classList.toggle("green", state.pct < 70);
+
+        if (state.source === "live") {
+            const word = state.status === "busy" ? "Busy" : "Open";
+            label.textContent = `Live: ${word} · reported ${minutesAgo(latestReport.at)}`;
+        } else {
+            label.textContent = `Estimated ${state.pct}% full`;
+        }
+        card.classList.toggle("has-live-report", state.source === "live");
     }
 
-    const heldSeats = loadHeldSeats();
-    document.querySelectorAll(".study-card[data-study-id]").forEach(card => {
-        updateStudyCard(card, heldSeats.includes(card.dataset.studyId));
-    });
+    document.querySelectorAll(".study-card[data-study-id]").forEach(renderStudyCard);
 
     document.addEventListener("click", event => {
-        const button = event.target.closest(".btn-hold-seat");
+        const button = event.target.closest(".study-report-btn");
         if (!button) return;
-
         const card = button.closest(".study-card[data-study-id]");
         if (!card) return;
 
-        const studyId = card.dataset.studyId;
-        const heldSeats = loadHeldSeats();
-        const isHeld = heldSeats.includes(studyId);
-        const updatedHeldSeats = isHeld
-            ? heldSeats.filter(heldStudyId => heldStudyId !== studyId)
-            : [...new Set([...heldSeats, studyId])];
-        saveHeldSeats(updatedHeldSeats);
-        updateStudyCard(card, !isHeld);
+        const reports = loadStudyReports();
+        reports[card.dataset.studyId] = { status: button.dataset.report, at: new Date().toISOString() };
+        saveStudyReports(reports);
+        renderStudyCard(card);
     });
 
     const toggleSwitch = document.getElementById("notifySwitch");
@@ -626,13 +561,230 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-        // Función de ejemplo para procesar el estado
+        // Example handler for the notification toggle state.
         function ejecutarAccionDeAlerta(estado) {
             if (estado === "on") {
-                console.log("🔔 Alertas activadas: El usuario recibirá notificaciones 10 min antes.");
-                // Aquí iría tu código para activar geolocalización o notificaciones push
+                console.log("Alerts on: the user will be notified 10 min before their route.");
+                // This is where push notifications / geofencing would be activated.
             } else {
-                console.log("🔕 Alertas desactivadas.");
+                console.log("Alerts off.");
             }
         }
+
+    // ======================================================================
+    //  LIVE WEATHER (Open-Meteo)
+    //  Pulls current conditions and today's forecast for the user's real
+    //  location. This block runs on page load so the Weather tab is live
+    //  immediately, independent of any other view.
+    // ======================================================================
+    const weatherCodeDescriptions = {
+        0: ["Clear sky", "☀️"], 1: ["Mainly clear", "🌤️"], 2: ["Partly cloudy", "⛅"],
+        3: ["Overcast", "☁️"], 45: ["Foggy", "🌫️"], 48: ["Rime fog", "🌫️"],
+        51: ["Light drizzle", "🌦️"], 53: ["Drizzle", "🌦️"], 55: ["Heavy drizzle", "🌧️"],
+        61: ["Light rain", "🌦️"], 63: ["Rain", "🌧️"], 65: ["Heavy rain", "🌧️"],
+        71: ["Light snow", "🌨️"], 73: ["Snow", "🌨️"], 75: ["Heavy snow", "❄️"],
+        80: ["Rain showers", "🌦️"], 81: ["Rain showers", "🌧️"], 82: ["Heavy showers", "⛈️"],
+        95: ["Thunderstorm", "⛈️"], 96: ["Thunderstorm with hail", "⛈️"], 99: ["Thunderstorm with hail", "⛈️"]
+    };
+
+    function setWeatherError(message) {
+        document.getElementById("weather-loading").hidden = true;
+        document.getElementById("current-weather-content").hidden = true;
+        const error = document.getElementById("weather-error");
+        error.textContent = message;
+        error.hidden = false;
+    }
+
+    // Fetch and render current conditions for the given coordinates.
+    async function loadWeather(coordinates) {
+        const weatherLocation = document.getElementById("weather-location");
+        const weatherUpdated = document.getElementById("weather-updated");
+        const weatherLoading = document.getElementById("weather-loading");
+        const weatherError = document.getElementById("weather-error");
+        if (!weatherRefresh) return;
+        weatherRefresh.disabled = true;
+        weatherRefresh.textContent = "Updating weather…";
+        weatherLoading.hidden = false;
+        weatherError.hidden = true;
+
+        const params = new URLSearchParams({
+            latitude: coordinates.latitude.toString(),
+            longitude: coordinates.longitude.toString(),
+            current: "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m",
+            daily: "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+            forecast_days: "1",
+            timezone: "auto"
+        });
+
+        try {
+            const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+            if (!response.ok) throw new Error(`Weather service returned ${response.status}.`);
+            const data = await response.json();
+            const current = data.current;
+            const daily = data.daily;
+            const [condition, icon] = weatherCodeDescriptions[current.weather_code] || ["Current conditions", "🌡️"];
+
+            weatherLocation.textContent = `${coordinates.latitude.toFixed(3)}°, ${coordinates.longitude.toFixed(3)}°`;
+            weatherUpdated.textContent = `Updated ${new Date(current.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · Live data`;
+            document.getElementById("current-weather-icon").textContent = icon;
+            document.getElementById("current-temperature").textContent = Math.round(current.temperature_2m);
+            document.getElementById("current-condition").textContent = condition;
+            document.getElementById("feels-like").textContent = `${Math.round(current.apparent_temperature)}°`;
+            document.getElementById("humidity").textContent = `${current.relative_humidity_2m}%`;
+            document.getElementById("wind-speed").textContent = `${Math.round(current.wind_speed_10m)} km/h`;
+            document.getElementById("rain-amount").textContent = `${current.precipitation} mm`;
+            document.getElementById("forecast-high").textContent = `${Math.round(daily.temperature_2m_max[0])}°`;
+            document.getElementById("forecast-low").textContent = `${Math.round(daily.temperature_2m_min[0])}°`;
+            document.getElementById("forecast-rain").textContent = `${daily.precipitation_probability_max[0]}%`;
+            weatherLoading.hidden = true;
+            document.getElementById("current-weather-content").hidden = false;
+            document.getElementById("weather-metrics").hidden = false;
+        } catch (error) {
+            console.error("Unable to load current weather.", error);
+            setWeatherError("Live weather is temporarily unavailable. Check your connection and try again.");
+        } finally {
+            weatherRefresh.disabled = false;
+            weatherRefresh.textContent = "Refresh weather";
+        }
+    }
+
+    // Ask the browser for the user's location, then load weather for it.
+    function requestWeather() {
+        if (!navigator.geolocation) {
+            setWeatherError("Your browser does not support location services, so local weather cannot be loaded.");
+            return;
+        }
+        weatherRefresh.disabled = true;
+        weatherRefresh.textContent = "Finding location…";
+        document.getElementById("weather-loading").hidden = false;
+        document.getElementById("current-weather-content").hidden = true;
+        document.getElementById("weather-metrics").hidden = true;
+        document.getElementById("weather-error").hidden = true;
+        if (lastWeatherCoordinates) {
+            loadWeather(lastWeatherCoordinates);
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            position => {
+                lastWeatherCoordinates = position.coords;
+                loadWeather(lastWeatherCoordinates);
+            },
+            error => {
+                const message = error.code === error.PERMISSION_DENIED
+                    ? "Location access was denied. Allow location access to see weather for your current location."
+                    : "We could not determine your location. Try refreshing weather again.";
+                setWeatherError(message);
+                weatherRefresh.disabled = false;
+                weatherRefresh.textContent = "Refresh weather";
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+        );
+    }
+
+    if (weatherRefresh) {
+        weatherRefresh.addEventListener("click", () => {
+            lastWeatherCoordinates = null;
+            requestWeather();
+        });
+        requestWeather(); // Load weather immediately on startup.
+    }
+
+    // ======================================================================
+    //  TRAIN-CROSSING ALERT CONFIRMATION (UC-01 operation contract)
+    //  A train-crossing alert is only raised when two DISTINCT reporters
+    //  confirm the same crossing within a 5-minute window. This keeps a
+    //  single prankster or an accidental tap from firing an alert. This is
+    //  the pure decision function behind UC-01's confirmAndNotify contract;
+    //  it is exposed on window so the test suite can exercise it directly.
+    // ======================================================================
+    const CONFIRMATION_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+
+    function shouldConfirmCrossingAlert(reportA, reportB) {
+        if (!reportA || !reportB) return false;
+        // Reports must be for the same crossing...
+        if (reportA.crossingId !== reportB.crossingId) return false;
+        // ...from two different reporters...
+        if (reportA.reporterId === reportB.reporterId) return false;
+        // ...within the confirmation window.
+        const gap = Math.abs(new Date(reportA.timestamp) - new Date(reportB.timestamp));
+        return gap <= CONFIRMATION_WINDOW_MS;
+    }
+    window.shouldConfirmCrossingAlert = shouldConfirmCrossingAlert;
+
+    // ======================================================================
+    //  LIVE CAMPUS-AREA WEATHER ALERTS (National Weather Service)
+    //  Real NWS watches/warnings for the UTA campus area are surfaced as
+    //  alert cards at the top of the Alerts tab. The National Weather
+    //  Service API is a public U.S. government service (no API key), and
+    //  returns active alerts as GeoJSON. UTA sits in Tarrant County, whose
+    //  NWS public zone is TXZ119 (FIPS county code 048439).
+    // ======================================================================
+    const NWS_ALERTS_ENDPOINT = "https://api.weather.gov/alerts/active?area=TX";
+    const CAMPUS_AREA_KEYWORDS = ["tarrant", "arlington"]; // Filter statewide feed down to campus.
+    const nwsAlertContainer = document.getElementById("nws-alert-list");
+    const nwsAlertStatus = document.getElementById("nws-alert-status");
+
+    // Pure, testable helper: given the raw NWS features and a set of
+    // keywords, return only the alerts whose areaDesc matches the campus
+    // area, sorted most-severe first. Exposed on window for the test suite.
+    function filterCampusAlerts(features, keywords) {
+        const severityRank = { Extreme: 0, Severe: 1, Moderate: 2, Minor: 3, Unknown: 4 };
+        return (features || [])
+            .map(feature => feature.properties || {})
+            .filter(properties => {
+                const areaText = (properties.areaDesc || "").toLowerCase();
+                return keywords.some(keyword => areaText.includes(keyword));
+            })
+            .sort((a, b) => (severityRank[a.severity] ?? 5) - (severityRank[b.severity] ?? 5));
+    }
+    window.filterCampusAlerts = filterCampusAlerts;
+
+    function renderCampusAlerts(alerts) {
+        if (!nwsAlertContainer) return;
+        if (!alerts.length) {
+            // No active alerts is the normal case; keep the section quiet.
+            nwsAlertContainer.innerHTML = "";
+            if (nwsAlertStatus) nwsAlertStatus.textContent = "No active weather alerts for the campus area.";
+            return;
+        }
+        if (nwsAlertStatus) {
+            nwsAlertStatus.textContent = `${alerts.length} active weather alert${alerts.length === 1 ? "" : "s"} near campus`;
+        }
+        nwsAlertContainer.innerHTML = "";
+        alerts.forEach(alert => {
+            const card = document.createElement("div");
+            card.className = "weather-card nws-alert-card";
+            const severity = alert.severity && alert.severity !== "Unknown" ? alert.severity : "Advisory";
+            const meta = document.createElement("div");
+            meta.className = "weather-meta";
+            meta.innerHTML = `<span>${severity} · NWS</span><span>${alert.event || "Weather alert"}</span>`;
+            const heading = document.createElement("h4");
+            heading.textContent = alert.headline || alert.event || "Active weather alert";
+            const body = document.createElement("p");
+            const area = alert.areaDesc ? `${alert.areaDesc}. ` : "";
+            body.textContent = area + (alert.instruction || alert.description || "Stay alert for changing conditions.").slice(0, 180);
+            card.append(meta, heading, body);
+            nwsAlertContainer.appendChild(card);
+        });
+    }
+
+    async function loadCampusAlerts() {
+        if (!nwsAlertContainer) return;
+        if (nwsAlertStatus) nwsAlertStatus.textContent = "Checking for live weather alerts…";
+        try {
+            const response = await fetch(NWS_ALERTS_ENDPOINT, {
+                headers: { "Accept": "application/geo+json" }
+            });
+            if (!response.ok) throw new Error(`NWS returned ${response.status}.`);
+            const data = await response.json();
+            renderCampusAlerts(filterCampusAlerts(data.features, CAMPUS_AREA_KEYWORDS));
+        } catch (error) {
+            // On failure, stay silent in the UI rather than showing a scary error;
+            // the hardcoded campus updates below still give the user something.
+            console.error("Unable to load live campus weather alerts.", error);
+            if (nwsAlertStatus) nwsAlertStatus.textContent = "Live weather alerts are temporarily unavailable.";
+        }
+    }
+
+    loadCampusAlerts(); // Check for real alerts on startup.
 });

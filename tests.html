@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MavPulse — Test Suite</title>
+    <style>
+        body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #1f2937; }
+        h1 { font-size: 20px; }
+        #test-summary { font-weight: 700; margin: 12px 0 18px; font-size: 15px; }
+        ul { list-style: none; padding: 0; }
+        li { padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 13px; }
+        li.pass { background: #ecfdf5; color: #065f46; }
+        li.fail { background: #fef2f2; color: #991b1b; }
+        .note { color: #6b7280; font-size: 12px; margin-top: 20px; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <h1>MavPulse Test Suite</h1>
+    <div id="test-summary">Running tests…</div>
+    <ul id="test-output"></ul>
+    <p class="note">
+        These tests exercise the app's core logic: the UC-01 train-crossing
+        confirmation rule, the study-seat occupancy calculation, and the
+        National Weather Service alert filtering. They can also be run from a
+        terminal with <code>node tests.js</code>.
+    </p>
+
+    <!-- Load the app logic (attaches the tested helpers to window), then the tests. -->
+    <script src="script.js"></script>
+    <script src="tests.js"></script>
+</body>
+</html>
