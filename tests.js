@@ -12,6 +12,8 @@
  *   - estimateOccupancy           (study-spot busyness estimate)
  *   - resolveStudyStatus          (crowd report vs estimate)
  *   - filterCampusAlerts          (NWS live-alert filtering)
+ *   - createClosureReport         (crowdsourced closure report validation)
+ *   - activeReports               (recent-report filtering)
  */
 
 (function () {
@@ -135,6 +137,28 @@
     test("An empty feed returns an empty list", () => {
         assertEqual(ctx.filterCampusAlerts([], ["tarrant"]).length, 0);
         assertEqual(ctx.filterCampusAlerts(undefined, ["tarrant"]).length, 0);
+    });
+
+    // --- Crowdsourced closure reports -----------------------------------
+    test("A report with a real location is created", () => {
+        const r = ctx.createClosureReport("W Mitchell St at Center", "train blocking", Date.now());
+        assert(r !== null, "valid report should be created");
+        assertEqual(r.location, "W Mitchell St at Center");
+        assertEqual(r.source, "user");
+    });
+
+    test("A report with no real location is rejected", () => {
+        assertEqual(ctx.createClosureReport("", "note", Date.now()), null);
+        assertEqual(ctx.createClosureReport("  a ", "note", Date.now()), null);
+    });
+
+    test("activeReports keeps recent reports and drops stale ones", () => {
+        const now = Date.now();
+        const fresh = { id: "1", location: "A", at: new Date(now - 60 * 1000).toISOString() };
+        const stale = { id: "2", location: "B", at: new Date(now - 13 * 60 * 60 * 1000).toISOString() };
+        const kept = ctx.activeReports([stale, fresh], now, 12 * 60 * 60 * 1000);
+        assertEqual(kept.length, 1);
+        assertEqual(kept[0].id, "1");
     });
 
     // ========================= REPORT ===================================

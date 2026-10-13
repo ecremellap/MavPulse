@@ -18,15 +18,16 @@ working prototype of the product users will eventually install.
 The app has five tabs:
 
 - **Alerts** — the live train-crossing alert, live National Weather Service
-  weather alerts for the campus area, dismiss/restore, and a "notify me before I
-  arrive" toggle.
-- **Map** — a campus map with toggleable layers (trains, parking, shuttles,
-  closures), tappable markers, and pan/zoom.
+  weather alerts for the campus area, crowdsourced closure reporting, dismiss/
+  restore, and a "notify me before I arrive" toggle.
+- **Map** — a real interactive OpenStreetMap map of campus (Leaflet) with pan/
+  zoom, tappable markers, and toggleable Trains / Parking / Shuttles / Closures
+  layers.
 - **Study** — campus study spots with quiet/group/open-now filters, a
   time-of-day busyness estimate, and crowd "busy/open" reporting that shows a
   live status when someone reports a spot.
 - **Weather** — live current conditions and today's forecast for the user's
-  location.
+  location, in Fahrenheit.
 - **Transit** — campus shuttle routes with filters and a refresh.
 
 ## Live data sources
@@ -47,6 +48,16 @@ Study-spot busyness has no public live feed, so it is shown as an estimate from
 a typical weekday pattern (scaled per spot by a busyness factor) and can be
 overridden by a user crowd-report ("busy" / "open") for up to an hour, the same
 crowdsourcing model the app uses for train crossings.
+
+Road closures likewise have no free public in-browser feed, so they are
+**crowdsourced**: commuters report a closure on the Alerts tab and it appears in
+the community feed. The app has no backend yet, so reports are stored in the
+reporter's own browser (`localStorage`); syncing reports across users is a
+planned backend step (e.g. Firebase).
+
+The map is a real interactive map (Leaflet + OpenStreetMap tiles). The Leaflet
+library is vendored under `vendor/leaflet/`, so the app has no external CDN
+dependency.
 
 ## How to run the app
 
@@ -70,7 +81,7 @@ conditions.
 ## How to run the tests
 
 The project ships a small, dependency-free test suite covering its core logic
-(the train-crossing confirmation rule, the study-spot estimate and crowd-report logic, and the
+(the train-crossing confirmation rule, the study-spot estimate and crowd-report logic, the closure-report validation, and the
 weather-alert filtering).
 
 **In a terminal (no install required):**
@@ -79,19 +90,20 @@ weather-alert filtering).
 node tests.js
 ```
 
-Expected output ends with `13 / 13 tests passed`.
+Expected output ends with `16 / 16 tests passed`.
 
 **In a browser:** open `tests.html` and read the pass/fail report on the page.
 
 ## Repository layout
 
 ```
-index.html    the app markup (the five tabs)
-style.css     all styling
-script.js     all app logic, including the two live-data integrations
-tests.js      the test suite (runs in Node or the browser)
-tests.html    browser runner for the test suite
-demo/         a standalone copy of the app for quick demos
+index.html      the app markup (the five tabs)
+style.css       all styling
+script.js       all app logic, including the live-data integrations and the map
+tests.js        the test suite (runs in Node or the browser)
+tests.html      browser runner for the test suite
+vendor/leaflet  the Leaflet map library, vendored locally (no CDN)
+demo/           a standalone copy of the app for quick demos
 ```
 
 ## Team

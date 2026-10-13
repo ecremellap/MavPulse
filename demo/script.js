@@ -5,8 +5,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const mainContent = document.querySelector(".main-content");
     const dismissedAlertList = document.getElementById("dismissed-alert-list");
     const savedAlertCount = document.getElementById("saved-alert-count");
-    const mapCanvas = document.querySelector(".map-canvas");
-    const mapStage = document.getElementById("map-stage");
     const mapFooterText = document.getElementById("map-footer-text");
     const mapDetailCard = document.getElementById("map-detail-card");
     const weatherRefresh = document.getElementById("weather-refresh");
@@ -180,112 +178,98 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (transitEmpty && transitUpdated) applyTransitFilter();
 
-    const mapLayerButtons = document.querySelectorAll(".filter-chip[data-layer]");
-    const mapLayerState = {};
+    // ==================================================================
+    //  INTERACTIVE CAMPUS MAP (Leaflet + OpenStreetMap)
+    //  A real, pannable/zoomable map of the UTA campus area. Markers are
+    //  grouped into toggleable layers (trains, parking, shuttles, closures)
+    //  wired to the filter chips. Map tiles come from OpenStreetMap; Leaflet
+    //  is vendored locally in /vendor/leaflet so there is no CDN dependency.
+    //  Marker positions are campus-area coordinates for the prototype; the
+    //  closure, parking, shuttle, and train details are sample data until
+    //  those sources are wired up in a later iteration.
+    // ==================================================================
+    const mapEl = document.getElementById("leaflet-map");
+    if (mapEl && window.L) {
+        const UTA_CENTER = [32.7307, -97.1140];
+        const campusMap = L.map(mapEl, { zoomControl: true, scrollWheelZoom: true }).setView(UTA_CENTER, 15);
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: "&copy; OpenStreetMap contributors"
+        }).addTo(campusMap);
 
-    function updateMapLayer(layer, isVisible) {
-        mapLayerState[layer] = isVisible;
-        document.querySelectorAll(`.marker[data-layer="${layer}"]`).forEach(marker => {
-            marker.hidden = !isVisible;
-            if (!isVisible) marker.classList.remove("selected");
-        });
-        const visibleMarkers = document.querySelectorAll(".marker:not([hidden])").length;
-        mapFooterText.textContent = `${visibleMarkers} marker${visibleMarkers === 1 ? "" : "s"} shown with your current layers. Tap a marker for live detail.`;
-    }
+        const LAYER_COLORS = { trains: "#b45309", parking: "#1f2937", shuttles: "#2563eb", closures: "#ea580c" };
 
-    mapLayerButtons.forEach(layerButton => {
-        const layer = layerButton.dataset.layer;
-        const initialState = layerButton.getAttribute("aria-pressed") === "true";
-        mapLayerState[layer] = initialState;
-        layerButton.addEventListener("click", event => {
-            event.preventDefault();
-            const isActive = !mapLayerState[layer];
-            layerButton.classList.toggle("active", isActive);
-            layerButton.setAttribute("aria-pressed", String(isActive));
-            updateMapLayer(layer, isActive);
-        });
-        updateMapLayer(layer, initialState);
-    });
+        // Campus-area points. Coordinates are approximate for the prototype.
+        const MAP_POINTS = [
+            { layer: "trains", title: "UP rail crossing – W Mitchell St", detail: "Union Pacific freight crossing. Sample data in this build.", lat: 32.7258, lng: 97.1136 * -1 },
+            { layer: "trains", title: "UP rail crossing – S Davis Dr", detail: "Freight crossing south of campus. Sample data in this build.", lat: 32.7261, lng: -97.1203 },
+            { layer: "parking", title: "Maverick Garage", detail: "Central-campus garage. Live counts are a planned source.", lat: 32.7325, lng: -97.1118 },
+            { layer: "parking", title: "Lot 49", detail: "Large commuter lot, about an 11 minute walk to the core. Live counts planned.", lat: 32.7250, lng: -97.1086 },
+            { layer: "shuttles", title: "Campus Loop – Central Library stop", detail: "Campus shuttle stop. Live arrivals are a planned source.", lat: 32.7299, lng: -97.1131 },
+            { layer: "shuttles", title: "Commuter stop – College Park", detail: "Commuter shuttle stop. Live arrivals planned.", lat: 32.7286, lng: -97.1095 },
+            { layer: "closures", title: "W Mitchell St crossing", detail: "Reported blockage point. Closures are crowd-reported in this build.", lat: 32.7258, lng: -97.1136 },
+            { layer: "closures", title: "Library walkway", detail: "Example maintenance closure. Crowd-reported in this build.", lat: 32.7302, lng: -97.1127 }
+        ];
 
-    document.querySelectorAll(".marker[data-layer]").forEach(marker => {
-        marker.addEventListener("click", () => {
-            document.querySelectorAll(".marker").forEach(item => item.classList.remove("selected"));
-            marker.classList.add("selected");
-            mapDetailCard.querySelector("h3").textContent = marker.dataset.title;
-            mapDetailCard.querySelector("p").textContent = marker.dataset.detail;
-        });
-    });
-
-    if (mapCanvas && mapStage) {
-        let mapScale = 1;
-        let mapOffsetX = 0;
-        let mapOffsetY = 0;
-        let dragStartX = 0;
-        let dragStartY = 0;
-        let startOffsetX = 0;
-        let startOffsetY = 0;
-
-        function renderMapTransform() {
-            mapStage.style.transform = `translate(${mapOffsetX}px, ${mapOffsetY}px) scale(${mapScale})`;
-        }
-
-        function setMapZoom(nextScale) {
-            mapScale = Math.min(2.2, Math.max(0.85, nextScale));
-            renderMapTransform();
-        }
-
-        document.getElementById("map-zoom-in").addEventListener("click", event => {
-            event.stopPropagation();
-            setMapZoom(mapScale + 0.2);
-        });
-        document.getElementById("map-zoom-out").addEventListener("click", event => {
-            event.stopPropagation();
-            setMapZoom(mapScale - 0.2);
-        });
-        document.getElementById("map-zoom-reset").addEventListener("click", event => {
-            event.stopPropagation();
-            mapScale = 1;
-            mapOffsetX = 0;
-            mapOffsetY = 0;
-            renderMapTransform();
-            mapLayerButtons.forEach(layerButton => {
-                const isDefaultLayer = layerButton.dataset.layer === "closures";
-                layerButton.classList.toggle("active", isDefaultLayer);
-                layerButton.setAttribute("aria-pressed", String(isDefaultLayer));
-                updateMapLayer(layerButton.dataset.layer, isDefaultLayer);
+        function makeIcon(color) {
+            return L.divIcon({
+                className: "mp-map-marker",
+                html: `<span style="background:${color}"></span>`,
+                iconSize: [18, 18],
+                iconAnchor: [9, 9]
             });
-            document.querySelectorAll(".marker").forEach(marker => marker.classList.remove("selected"));
-            mapDetailCard.querySelector("h3").textContent = "Select a marker";
-            mapDetailCard.querySelector("p").textContent = "Choose a colored dot to see live campus information.";
+        }
+
+        function showDetail(point) {
+            if (!mapDetailCard) return;
+            mapDetailCard.querySelector("h3").textContent = point.title;
+            mapDetailCard.querySelector("p").textContent = point.detail;
+        }
+
+        const layerGroups = {
+            trains: L.layerGroup(), parking: L.layerGroup(),
+            shuttles: L.layerGroup(), closures: L.layerGroup()
+        };
+        MAP_POINTS.forEach(point => {
+            const marker = L.marker([point.lat, point.lng], { icon: makeIcon(LAYER_COLORS[point.layer]) });
+            marker.bindPopup(`<strong>${point.title}</strong><br>${point.detail}`);
+            marker.on("click", () => showDetail(point));
+            marker.addTo(layerGroups[point.layer]);
         });
 
-        mapCanvas.addEventListener("wheel", event => {
-            event.preventDefault();
-            setMapZoom(mapScale + (event.deltaY < 0 ? 0.1 : -0.1));
-        }, { passive: false });
+        function updateMapFooter() {
+            if (!mapFooterText) return;
+            let count = 0;
+            Object.keys(layerGroups).forEach(key => {
+                if (campusMap.hasLayer(layerGroups[key])) count += layerGroups[key].getLayers().length;
+            });
+            mapFooterText.textContent = `${count} marker${count === 1 ? "" : "s"} shown with your current layers. Tap a marker for detail.`;
+        }
 
-        mapCanvas.addEventListener("pointerdown", event => {
-            if (event.target.closest(".marker, .map-zoom-controls")) return;
-            mapCanvas.setPointerCapture(event.pointerId);
-            mapCanvas.classList.add("is-dragging");
-            dragStartX = event.clientX;
-            dragStartY = event.clientY;
-            startOffsetX = mapOffsetX;
-            startOffsetY = mapOffsetY;
+        function setLayer(layer, on) {
+            if (on) layerGroups[layer].addTo(campusMap);
+            else campusMap.removeLayer(layerGroups[layer]);
+            updateMapFooter();
+        }
+
+        const mapLayerButtons = document.querySelectorAll(".filter-chip[data-layer]");
+        mapLayerButtons.forEach(button => {
+            const layer = button.dataset.layer;
+            setLayer(layer, button.getAttribute("aria-pressed") === "true");
+            button.addEventListener("click", event => {
+                event.preventDefault();
+                const on = button.getAttribute("aria-pressed") !== "true";
+                button.classList.toggle("active", on);
+                button.setAttribute("aria-pressed", String(on));
+                setLayer(layer, on);
+            });
         });
-        mapCanvas.addEventListener("pointermove", event => {
-            if (!mapCanvas.hasPointerCapture(event.pointerId)) return;
-            mapOffsetX = startOffsetX + event.clientX - dragStartX;
-            mapOffsetY = startOffsetY + event.clientY - dragStartY;
-            renderMapTransform();
-        });
-        mapCanvas.addEventListener("pointerup", event => {
-            mapCanvas.releasePointerCapture(event.pointerId);
-            mapCanvas.classList.remove("is-dragging");
-        });
-        mapCanvas.addEventListener("pointercancel", event => {
-            mapCanvas.releasePointerCapture(event.pointerId);
-            mapCanvas.classList.remove("is-dragging");
+
+        // Leaflet computes size on init; the map tab is hidden at startup, so
+        // recompute whenever the user opens it (via the tab or the detour button).
+        function refreshMapSize() { window.setTimeout(() => campusMap.invalidateSize(), 150); }
+        document.querySelectorAll('[data-view="map"], #btn-detour').forEach(el => {
+            el.addEventListener("click", refreshMapSize);
         });
     }
 
@@ -612,6 +596,9 @@ document.addEventListener("DOMContentLoaded", () => {
             longitude: coordinates.longitude.toString(),
             current: "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m",
             daily: "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+            temperature_unit: "fahrenheit",
+            wind_speed_unit: "mph",
+            precipitation_unit: "inch",
             forecast_days: "1",
             timezone: "auto"
         });
@@ -631,8 +618,8 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("current-condition").textContent = condition;
             document.getElementById("feels-like").textContent = `${Math.round(current.apparent_temperature)}°`;
             document.getElementById("humidity").textContent = `${current.relative_humidity_2m}%`;
-            document.getElementById("wind-speed").textContent = `${Math.round(current.wind_speed_10m)} km/h`;
-            document.getElementById("rain-amount").textContent = `${current.precipitation} mm`;
+            document.getElementById("wind-speed").textContent = `${Math.round(current.wind_speed_10m)} mph`;
+            document.getElementById("rain-amount").textContent = `${current.precipitation} in`;
             document.getElementById("forecast-high").textContent = `${Math.round(daily.temperature_2m_max[0])}°`;
             document.getElementById("forecast-low").textContent = `${Math.round(daily.temperature_2m_min[0])}°`;
             document.getElementById("forecast-rain").textContent = `${daily.precipitation_probability_max[0]}%`;
@@ -787,4 +774,146 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     loadCampusAlerts(); // Check for real alerts on startup.
+
+    // ======================================================================
+    //  CROWDSOURCED CLOSURE REPORTS
+    //  There is no free public live feed for road/lane closures, so commuters
+    //  report them here, the same crowdsourcing model the app uses for train
+    //  crossings and study spots. The app has no backend yet, so reports are
+    //  saved in this browser's localStorage; syncing reports across users is a
+    //  planned backend step (e.g. Firebase). Report creation and the
+    //  recent-reports filter are pure, tested functions.
+    // ======================================================================
+    const CLOSURE_REPORTS_KEY = "campus-app-closure-reports";
+    const REPORT_MAX_AGE_MS = 12 * 60 * 60 * 1000; // show reports from the last 12 hours
+
+    // Pure: build a validated report object, or return null if invalid.
+    function createClosureReport(location, note, now) {
+        const trimmedLocation = (location || "").trim();
+        if (trimmedLocation.length < 3) return null; // need a real location
+        return {
+            id: `r-${now}-${Math.random().toString(36).slice(2, 7)}`,
+            location: trimmedLocation.slice(0, 80),
+            note: (note || "").trim().slice(0, 120),
+            at: new Date(now).toISOString(),
+            source: "user"
+        };
+    }
+    window.createClosureReport = createClosureReport;
+
+    // Pure: keep only reports newer than the max age, newest first.
+    function activeReports(reports, now, maxAgeMs) {
+        return (reports || [])
+            .filter(report => report && report.at && (now - new Date(report.at).getTime()) <= maxAgeMs)
+            .sort((a, b) => new Date(b.at) - new Date(a.at));
+    }
+    window.activeReports = activeReports;
+
+    const reportToggleBtn = document.getElementById("report-toggle-btn");
+    const reportForm = document.getElementById("report-form");
+    const reportLocationInput = document.getElementById("report-location");
+    const reportNoteInput = document.getElementById("report-note");
+    const reportError = document.getElementById("report-error");
+    const reportList = document.getElementById("report-list");
+
+    function loadClosureReports() {
+        try {
+            const reports = JSON.parse(localStorage.getItem(CLOSURE_REPORTS_KEY) || "[]");
+            return Array.isArray(reports) ? reports : [];
+        } catch (error) {
+            console.error("Unable to load closure reports.", error);
+            return [];
+        }
+    }
+    function saveClosureReports(reports) {
+        try {
+            localStorage.setItem(CLOSURE_REPORTS_KEY, JSON.stringify(reports));
+        } catch (error) {
+            console.error("Unable to save closure reports.", error);
+        }
+    }
+    function reportMinutesAgo(iso) {
+        const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+        if (mins <= 0) return "just now";
+        if (mins === 1) return "1 min ago";
+        if (mins < 60) return `${mins} min ago`;
+        const hours = Math.round(mins / 60);
+        return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+    }
+
+    function renderClosureReports() {
+        if (!reportList) return;
+        const reports = activeReports(loadClosureReports(), Date.now(), REPORT_MAX_AGE_MS);
+        if (!reports.length) {
+            reportList.innerHTML = '<p class="empty-alerts">No community reports right now. Be the first to report one.</p>';
+            return;
+        }
+        reportList.innerHTML = "";
+        reports.forEach(report => {
+            const card = document.createElement("article");
+            card.className = "report-card";
+            const meta = document.createElement("div");
+            meta.className = "weather-meta";
+            meta.innerHTML = `<span>Community report</span><span>${reportMinutesAgo(report.at)}</span>`;
+            const heading = document.createElement("h4");
+            heading.textContent = report.location;
+            card.append(meta, heading);
+            if (report.note) {
+                const note = document.createElement("p");
+                note.textContent = report.note;
+                card.appendChild(note);
+            }
+            const clear = document.createElement("button");
+            clear.className = "report-clear-btn";
+            clear.type = "button";
+            clear.dataset.clearReport = report.id;
+            clear.textContent = "Remove";
+            card.appendChild(clear);
+            reportList.appendChild(card);
+        });
+    }
+
+    if (reportToggleBtn && reportForm) {
+        reportToggleBtn.addEventListener("click", () => {
+            const open = reportForm.hidden;
+            reportForm.hidden = !open;
+            reportToggleBtn.setAttribute("aria-expanded", String(open));
+            reportToggleBtn.textContent = open ? "Close" : "Report a closure";
+            if (open && reportLocationInput) reportLocationInput.focus();
+        });
+
+        reportForm.addEventListener("submit", event => {
+            event.preventDefault();
+            const report = createClosureReport(
+                reportLocationInput ? reportLocationInput.value : "",
+                reportNoteInput ? reportNoteInput.value : "",
+                Date.now()
+            );
+            if (!report) {
+                if (reportError) reportError.textContent = "Please enter a location (at least 3 characters).";
+                return;
+            }
+            if (reportError) reportError.textContent = "";
+            const reports = loadClosureReports();
+            reports.unshift(report);
+            saveClosureReports(reports);
+            reportForm.reset();
+            reportForm.hidden = true;
+            reportToggleBtn.setAttribute("aria-expanded", "false");
+            reportToggleBtn.textContent = "Report a closure";
+            renderClosureReports();
+        });
+    }
+
+    if (reportList) {
+        reportList.addEventListener("click", event => {
+            const clearBtn = event.target.closest("[data-clear-report]");
+            if (!clearBtn) return;
+            const reports = loadClosureReports().filter(report => report.id !== clearBtn.dataset.clearReport);
+            saveClosureReports(reports);
+            renderClosureReports();
+        });
+    }
+
+    renderClosureReports();
 });

@@ -386,6 +386,78 @@ body {
 }
 .nws-alert-list .nws-alert-card + .nws-alert-card { margin-top: 10px; }
 
+/* Crowdsourced closure reports */
+.reports-section { margin-top: 18px; }
+.reports-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+.reports-subtitle { font-size: 11px; color: #6b7280; margin-bottom: 8px; }
+.report-toggle-btn {
+    flex-shrink: 0;
+    background-color: var(--bg-dark-body);
+    color: #ffffff;
+    border: none;
+    padding: 7px 14px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.report-form {
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    padding: 12px;
+    margin: 4px 0 10px;
+}
+.report-field { display: block; margin-bottom: 10px; }
+.report-field span { display: block; font-size: 11px; font-weight: 700; color: var(--color-text-dark); margin-bottom: 4px; }
+.report-field input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 9px;
+    font-size: 13px;
+}
+.report-form-actions { display: flex; align-items: center; gap: 10px; }
+.report-submit-btn {
+    background-color: var(--color-orange-alert);
+    color: #ffffff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 9px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.report-error { font-size: 11px; color: #b91c1c; }
+.report-card {
+    background: #ffffff;
+    border: 1px solid var(--color-border);
+    border-left: 4px solid #2563eb;
+    border-radius: 12px;
+    padding: 12px;
+}
+.report-list .report-card + .report-card { margin-top: 10px; }
+.report-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+.report-card p { font-size: 11.5px; color: #4b5563; line-height: 1.4; }
+.report-clear-btn {
+    display: block;
+    margin-left: auto;
+    margin-top: 8px;
+    background: none;
+    border: none;
+    color: #6b7280;
+    font-size: 11px;
+    cursor: pointer;
+    text-decoration: underline;
+}
+.reports-note { font-size: 10.5px; color: #9ca3af; margin-top: 8px; line-height: 1.4; }
+
 .filter-bar {
     display: flex;
     gap: 8px;
@@ -418,56 +490,26 @@ body {
 }
 .filter-chip:not(.active) { background-color: #ffffff; color: var(--color-text-dark); border-color: var(--color-border); }
 .map-canvas {
-    height: 280px;
-    background-color: #e0ded6;
+    height: 300px;
     margin: 0 16px;
     border-radius: 16px;
     position: relative;
     border: 1px solid #d1d5db;
     overflow: hidden;
-    cursor: grab;
 }
-.map-canvas.is-dragging { cursor: grabbing; }
-.map-stage {
-    position: absolute;
-    inset: -12%;
-    width: 124%;
-    height: 124%;
-    transform-origin: center;
-    transition: transform 0.2s ease-out;
+#leaflet-map {
+    width: 100%;
+    height: 100%;
 }
-.map-canvas.is-dragging .map-stage { transition: none; }
-.map-canvas::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: 16px;
-    background: linear-gradient(135deg, rgba(255,255,255,0.25), transparent 45%);
-    pointer-events: none;
-}
-.map-road-h { position: absolute; top: 35%; left: 0; width: 100%; height: 26px; background-color: #edf0e9; }
-.map-road-v { position: absolute; top: 0; left: 32%; width: 26px; height: 100%; background-color: #edf0e9; }
-.map-building-1 { position: absolute; top: 15px; left: 15px; width: 70px; height: 55px; background-color: #cbcaa7; border-radius: 6px; }
-.map-building-2 { position: absolute; bottom: 35px; right: 25px; width: 100px; height: 65px; background-color: #cbcaa7; border-radius: 6px; }
-.map-building-3 { position: absolute; top: 62%; left: 12%; width: 75px; height: 42px; background-color: #bcb995; border-radius: 6px; }
-.map-building-4 { position: absolute; top: 12%; right: 12%; width: 55px; height: 78px; background-color: #bcb995; border-radius: 6px; }
-.marker {
-    position: absolute;
-    z-index: 2;
-    width: 18px;
-    height: 18px;
-    padding: 0;
+/* Custom Leaflet divIcon markers, colored per layer */
+.mp-map-marker span {
+    display: block;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
     border: 2px solid #ffffff;
-    cursor: pointer;
-    box-shadow: 0 2px 5px rgba(17, 28, 36, 0.3);
-    transition: transform 0.2s ease, opacity 0.2s ease;
+    box-shadow: 0 2px 5px rgba(17, 28, 36, 0.35);
 }
-.marker:hover, .marker:focus-visible, .marker.selected { transform: scale(1.35); outline: none; }
-.marker[hidden] { display: none; }
-.marker.orange { background-color: var(--color-orange-alert); }
-.marker.dark { background-color: var(--bg-dark-body); }
-.marker.train { background-color: #2563eb; }
 .map-footer-text { padding: 16px; font-size: 12px; color: var(--color-text-muted); line-height: 1.4; }
 .map-detail-card {
     margin: 0 16px 16px;
@@ -486,30 +528,6 @@ body {
 }
 .map-detail-card h3 { color: var(--color-text-dark); font-size: 15px; margin: 4px 0; }
 .map-detail-card p { color: var(--color-text-muted); font-size: 11px; line-height: 1.4; }
-.map-zoom-controls {
-    position: absolute;
-    z-index: 4;
-    right: 10px;
-    bottom: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-.map-zoom-controls button {
-    min-width: 30px;
-    min-height: 30px;
-    border: 1px solid rgba(17, 28, 36, 0.15);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.92);
-    color: var(--color-text-dark);
-    font-size: 18px;
-    font-weight: 800;
-    cursor: pointer;
-    box-shadow: 0 2px 6px rgba(17, 28, 36, 0.12);
-}
-.map-zoom-controls button:last-child { font-size: 9px; padding: 0 6px; }
-.map-zoom-controls button:hover,
-.map-zoom-controls button:focus-visible { background: #000; color: #fff; outline: none; }
 .map-legend {
     display: flex;
     flex-wrap: wrap;
@@ -528,8 +546,10 @@ body {
     height: 9px;
     border-radius: 50%;
 }
-.legend-dot.orange { background-color: var(--color-orange-alert); }
-.legend-dot.dark { background-color: var(--bg-dark-body); }
+.legend-dot.closures { background-color: #ea580c; }
+.legend-dot.trains { background-color: #b45309; }
+.legend-dot.parking { background-color: #1f2937; }
+.legend-dot.shuttles { background-color: #2563eb; }
 
 .study-card {
     background-color: #ffffff;

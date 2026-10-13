@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MavPulse — UTA Campus & Commute</title>
+    <!-- Leaflet (vendored locally, no CDN dependency) -->
+    <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
     <!-- External stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
@@ -42,6 +44,32 @@
                             <div class="section-divider" id="nws-alerts-title">Live weather alerts</div>
                             <div class="nws-alert-status" id="nws-alert-status" aria-live="polite">Checking for live weather alerts…</div>
                             <div id="nws-alert-list" class="nws-alert-list"></div>
+                        </section>
+
+                        <section class="reports-section" aria-labelledby="reports-title">
+                            <div class="reports-header">
+                                <div>
+                                    <div class="section-divider" id="reports-title">Community reports</div>
+                                    <div class="reports-subtitle">Closures and crossings reported by other commuters.</div>
+                                </div>
+                                <button class="report-toggle-btn" id="report-toggle-btn" type="button" aria-expanded="false">Report a closure</button>
+                            </div>
+                            <form class="report-form" id="report-form" hidden>
+                                <label class="report-field">
+                                    <span>Where?</span>
+                                    <input type="text" id="report-location" maxlength="80" placeholder="e.g. W Mitchell St at S Center St" autocomplete="off">
+                                </label>
+                                <label class="report-field">
+                                    <span>What's happening? (optional)</span>
+                                    <input type="text" id="report-note" maxlength="120" placeholder="e.g. Train blocking the crossing" autocomplete="off">
+                                </label>
+                                <div class="report-form-actions">
+                                    <button type="submit" class="report-submit-btn">Post report</button>
+                                    <span class="report-error" id="report-error" aria-live="polite"></span>
+                                </div>
+                            </form>
+                            <div id="report-list" class="report-list"></div>
+                            <div class="reports-note">Reports are saved on your device in this build. A shared feed across users is a planned backend step.</div>
                         </section>
 
                         <section class="dismissed-alerts" aria-labelledby="dismissed-alerts-title">
@@ -97,31 +125,10 @@
                         <button class="filter-chip active" type="button" data-layer="closures" aria-pressed="true">Closures</button>
                     </div>
                     <div class="map-canvas">
-                        <div class="map-stage" id="map-stage">
-                            <div class="map-road-h"></div>
-                            <div class="map-road-v"></div>
-                            <div class="map-building-1"></div>
-                            <div class="map-building-2"></div>
-                            <div class="map-building-3"></div>
-                            <div class="map-building-4"></div>
-                            <button class="marker orange" type="button" data-layer="closures" data-title="W Mitchell St crossing" data-detail="Freight train crossing detected. Expected to clear in 1:14." style="top: 30%; left: 16%;" aria-label="W Mitchell Street crossing closure"></button>
-                            <button class="marker orange" type="button" data-layer="closures" data-title="Cooper St underpass" data-detail="Open route. Use this underpass while the main crossing is blocked." style="top: 40%; left: 33%;" aria-label="Cooper Street underpass"></button>
-                            <button class="marker orange" type="button" data-layer="closures" data-title="Library Walkway" data-detail="Temporarily closed for cleaning. Use the east entrance until 9:30 AM." style="top: 20%; left: 68%;" aria-label="Library Walkway closure"></button>
-                            <button class="marker dark" type="button" data-layer="parking" data-title="Maverick Garage" data-detail="6 spaces open. Central campus is a 3 minute walk away." style="top: 34%; left: 52%;" aria-label="Maverick Garage parking"></button>
-                            <button class="marker dark" type="button" data-layer="parking" data-title="Lot 49" data-detail="178 spaces open. Best current option, with an 11 minute walk to campus core." style="top: 70%; left: 76%;" aria-label="Lot 49 parking"></button>
-                            <button class="marker dark" type="button" data-layer="shuttles" data-title="Campus Loop stop" data-detail="Route B arriving in 14 minutes. Wet-weather headways are active." style="top: 55%; left: 74%;" aria-label="Campus Loop shuttle stop"></button>
-                            <button class="marker dark" type="button" data-layer="shuttles" data-title="Central Library stop" data-detail="Route A arriving in 6 minutes. Boarding zone is beside the north entrance." style="top: 78%; left: 38%;" aria-label="Central Library shuttle stop"></button>
-                            <button class="marker train" type="button" data-layer="trains" data-title="UTA rail crossing" data-detail="Next freight movement expected at 8:20 AM. Allow extra travel time." style="top: 65%; left: 22%;" aria-label="UTA rail crossing"></button>
-                            <button class="marker train" type="button" data-layer="trains" data-title="West rail signal" data-detail="Rail traffic moving slowly. Crossing status is expected to normalize in 18 minutes." style="top: 12%; left: 43%;" aria-label="West rail signal"></button>
-                        </div>
-                        <div class="map-zoom-controls" aria-label="Map zoom controls">
-                            <button type="button" id="map-zoom-in" aria-label="Zoom in">+</button>
-                            <button type="button" id="map-zoom-out" aria-label="Zoom out">−</button>
-                            <button type="button" id="map-zoom-reset" aria-label="Reset map view">Reset</button>
-                        </div>
+                        <div id="leaflet-map"></div>
                     </div>
                     <div class="map-footer-text" id="map-footer-text">
-                        Tap a marker for live detail. 2 markers shown with your current layers.
+                        Tap a marker for detail. Toggle layers with the chips above.
                     </div>
                     <div class="map-detail-card" id="map-detail-card" aria-live="polite">
                         <div class="map-detail-label">Selected location</div>
@@ -129,8 +136,10 @@
                         <p>Choose a colored dot to see live campus information.</p>
                     </div>
                     <div class="map-legend">
-                        <div><span class="legend-dot orange"></span> Active closure</div>
-                        <div><span class="legend-dot dark"></span> Parking or shuttle</div>
+                        <div><span class="legend-dot closures"></span> Closure</div>
+                        <div><span class="legend-dot trains"></span> Train crossing</div>
+                        <div><span class="legend-dot parking"></span> Parking</div>
+                        <div><span class="legend-dot shuttles"></span> Shuttle</div>
                     </div>
                 </div>
 
@@ -374,6 +383,8 @@
         </div>
     </div>
 
+    <!-- Leaflet library (vendored locally) -->
+    <script src="vendor/leaflet/leaflet.js"></script>
     <!-- External JavaScript -->
     <script src="script.js"></script>
 </body>
