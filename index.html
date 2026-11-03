@@ -6,7 +6,6 @@
     <meta name="theme-color" content="#0f1920">
     <meta name="description" content="MavPulse: live rail crossings, closures, weather alerts, parking and MavMover shuttles for the UTA community.">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="MavPulse">
     <title>MavPulse — UTA Campus & Commute</title>
     <link rel="manifest" href="manifest.webmanifest">
@@ -104,7 +103,7 @@
                     <div class="weather-strip-main">
                         <div><strong id="current-temperature">--</strong>° <span id="current-condition">Loading weather</span></div>
                         <div class="weather-strip-sub" id="weather-sub">UTA campus · Open-Meteo</div>
-                        <div class="weather-strip-sub" id="weather-updated">UTA campus · Open-Meteo</div>
+                        <div class="weather-strip-sub" id="weather-updated"></div>
                     </div>
                     <button class="icon-btn light" id="weather-refresh" type="button" aria-label="Refresh weather"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg></button>
                 </div>
@@ -326,6 +325,7 @@
 <script src="firebase-config.js"></script>
 <script src="data.js"></script>
 <script src="parking-areas.js"></script>
+<script src="detours.js"></script>
 <script src="logic.js"></script>
 <script src="store.js"></script>
 <script src="citydata.js"></script>

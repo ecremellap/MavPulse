@@ -1371,3 +1371,36 @@ button:active, .tripshot-card:active, a.pill-btn:active { transform: scale(0.96)
 .parking-finder span span { font-size: 12px; opacity: 0.9; }
 
 .garages-far .leaflet-tooltip.garage-tip.cp:not(.cp-main) { display: none; }
+
+/* Lamp + markers for "likely blocked" (same long train) */
+.signal-row.likely .lamp { background: var(--amber); box-shadow: 0 0 0 4px rgba(183,121,31,0.22); }
+.signal-row.likely .crossing-sub { color: #8a5a12; font-weight: 600; }
+.big-btn.is-likely { border-color: var(--amber); background: #fff7e6; }
+.mk.crossing-likely { background: var(--amber); }
+.mk.underpass { background: var(--signal-green); width: 26px; height: 26px; }
+.leaflet-tooltip.blocked-tip.likely { background: var(--amber); }
+.leaflet-tooltip.blocked-tip.likely::before { border-top-color: var(--amber); }
+.leaflet-tooltip.underpass-tip { background: var(--signal-green); color: #fff; border: none; font-weight: 800; font-size: 11px; padding: 3px 7px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
+.leaflet-tooltip.underpass-tip::before { border-right-color: var(--signal-green); }
+.train-band { animation: trainMove 1.2s linear infinite; }
+@keyframes trainMove { to { stroke-dashoffset: -22; } }
+.detour-line { stroke-dasharray: 2000; animation: drawDetour 1.2s var(--ease-out) both; }
+@keyframes drawDetour { from { stroke-dashoffset: 2000; } to { stroke-dashoffset: 0; } }
+
+/* Live MavMover buses */
+.bus-mk { position: relative; display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--route, #0057a8); border: 3px solid #fff; box-shadow: 0 3px 8px rgba(0,0,0,0.35); }
+.bus-mk .mi { width: 14px; height: 14px; }
+.bus-mk.stale { opacity: 0.55; }
+.bus-arrow { position: absolute; inset: -9px; pointer-events: none; }
+.bus-arrow::before { content: ""; position: absolute; left: 50%; top: 0; transform: translateX(-50%); border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 8px solid var(--route, #0057a8); }
+.bus-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 10px 0 2px; }
+.bus-chip { width: 28px; height: 28px; border-radius: 50%; background: var(--route); display: inline-flex; align-items: center; justify-content: center; }
+.bus-chip .mi { width: 14px; height: 14px; }
+.bus-text strong { display: block; font-size: 14px; color: var(--ink); }
+.bus-text span { font-size: 12px; color: var(--ink-2); }
+.route-status.live { color: var(--signal-green); }
+.route-status.live::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--signal-green); margin-right: 6px; animation: livePulse 1.6s infinite; vertical-align: 1px; }
+@keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+#transit-updated.live { color: var(--signal-green); font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { .train-band, .detour-line { animation: none; } }
+.leaflet-tooltip.underpass-tip::before { border-bottom-color: var(--signal-green); border-right-color: transparent; }

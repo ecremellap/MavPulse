@@ -15,6 +15,7 @@
     const D = inNode ? require("./data.js") : window.MP_DATA;
     const STORE = inNode ? require("./store.js") : window.MP_STORE;
     const AREAS = inNode ? require("./parking-areas.js") : window.MP_PARKING_AREAS;
+    const DET = inNode ? require("./detours.js") : window.MP_DETOURS;
 
     const results = [];
     const pending = [];
@@ -254,6 +255,65 @@
         eq(D.PARKING_ZONES.length, 4);
         assert(D.PARKING_ZONES.find(z => z.id === "south").places.includes("49"), "Lot 49 is in Commuter South");
         assert(D.PARKING_ZONES.find(z => z.id === "west").places.includes("West Campus Garage"), "West Campus Garage is in Commuter West");
+    });
+
+
+    // ===================== long trains & detours =====================
+    const withStates = st => D.CROSSINGS.map(c => ({ ...c, state: st[c.id] || "clear", lastAt: T0 }));
+    test("Long train: a confirmed block at Cooper marks crossings within 2 km as likely blocked", () => {
+        const out = MP.spreadTrain(withStates({ cooper: "confirmed" }));
+        const by = Object.fromEntries(out.map(c => [c.id, c.state]));
+        eq(by.cooper, "confirmed"); eq(by.davis, "likely"); eq(by.center, "likely"); eq(by.mesquite, "likely"); eq(by.collins, "likely");
+    });
+    test("Long train: Bowen Rd (3.3 km from Cooper) stays clear", () => {
+        eq(MP.spreadTrain(withStates({ cooper: "confirmed" })).find(c => c.id === "bowen").state, "clear");
+    });
+    test("Long train: 'likely' is never upgraded to confirmed without reports", () => {
+        const out = MP.spreadTrain(withStates({ center: "reported" }));
+        assert(out.filter(c => c.state === "confirmed").length === 0, "no confirmations from inference");
+    });
+    test("Long train: likely crossings name the crossing the train was reported at", () => {
+        eq(MP.spreadTrain(withStates({ center: "confirmed" })).find(c => c.id === "mesquite").cause, "Center St");
+    });
+    test("Detours: every crossing has a street route that passes through its underpass/bridge", () => {
+        D.CROSSINGS.forEach(c => {
+            const d = DET.DETOURS[c.id];
+            assert(d && d.path.length > 10, `${c.name} has no detour`);
+            const closest = Math.min(...d.path.map(([la, ln]) => MP.distanceMeters({ lat: la, lng: ln }, d.via)));
+            assert(closest < 40, `${c.name} detour misses ${d.via.name} by ${Math.round(closest)} m`);
+        });
+    });
+    test("Detours: crossings near campus use the West St underpass; Bowen uses Fielder Rd", () => {
+        ["davis", "cooper", "center", "mesquite", "collins"].forEach(id => eq(DET.DETOURS[id].via.name, "West St underpass"));
+        eq(DET.DETOURS.bowen.via.name, "Fielder Rd bridge");
+    });
+
+    // ===================== live MavMover (TripShot) =====================
+    test("Polyline decoding matches TripShot's own coordinates", () => {
+        const p = MP.decodePolyline("}nwfEzqxoQ?bA?|@?TAR");
+        eq(p[0][0], 32.72959); eq(p[0][1], -97.1243); eq(p.length, 5);
+    });
+    const tsSample = { InternalRouteDetails: { route: { routeId: "r1", name: "Red Route", shortName: "Red", color: "#FF0000" }, inexactTimetables: [{
+        stops: [{ stopId: "S1", name: "Lot 27", location: { lt: 32.72959, lg: -97.1243 } }, { stopId: "S2", name: "Centennial Court", location: { lt: 32.7255, lg: -97.1180 } }],
+        navigations: [{ legs: [{ steps: [{ polyline: "}nwfEzqxoQ?bA?|@?TAR" }] }] }],
+        liveRides: [{ vehicle: { capacity: 30 }, vehicleStatus: { vehicleId: "v1", name: "Bus 237", location: { lt: 32.726, lg: -97.1225 }, bearing: 322, apcOccupancy: 4, when: new Date(T0 - 20000).toISOString() },
+            ride: { stopStatus: [{ Departed: { stopId: "S1" } }, { Awaiting: { stopId: "s2", expectedArrivalTime: new Date(T0 + 3 * 60000).toISOString(), riderStatus: "Delayed" } }] } }]
+    }] } };
+    test("TripShot: a live bus is parsed with position, riders, next stop and ETA", () => {
+        const r = MP.parseTripShotRoute(tsSample, T0);
+        eq(r.name, "Red Route"); eq(r.buses.length, 1);
+        const b = r.buses[0];
+        eq(b.name, "Bus 237"); eq(b.riders, 4); eq(b.capacity, 30); eq(b.nextStop, "Centennial Court"); eq(b.etaMin, 3); eq(b.delayed, true); eq(b.stale, false);
+    });
+    test("TripShot: route line and stops are parsed for the map", () => {
+        const r = MP.parseTripShotRoute(tsSample, T0);
+        eq(r.stops.length, 2); assert(r.path.length >= 5, "route line decoded");
+    });
+    test("TripShot: a bus not heard from in 3+ minutes is marked stale", () => {
+        eq(MP.parseTripShotRoute(tsSample, T0 + 5 * 60000).buses[0].stale, true);
+    });
+    test("TripShot: an unexpected response is handled safely", () => {
+        eq(MP.parseTripShotRoute(null, T0), null); eq(MP.parseTripShotRoute({}, T0), null);
     });
 
     // ===================== ReportStore (on-device) =====================

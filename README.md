@@ -21,12 +21,14 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 |---|---|---|
 | Rail crossing status (Cooper, Center, Mesquite, Davis, Collins, Bowen) | Crowd reports; positions from OpenStreetMap (UP Dallas Subdivision) | Live, shared |
 | Two-reporter confirmation, 20-min expiry, "it's clear" | UC-01 rules in `logic.js` | Live |
+| Long trains: one report marks crossings within 2 km as "likely blocked" | `logic.spreadTrain` | Live |
+| Detour drawn on the map through the West St underpass (rail bridge over West St) or the Fielder Rd bridge | OpenStreetMap + OSRM routes in `detours.js` | Live |
 | Closures (kind + location from a picker, GPS, or map tap — no typing) | Crowd reports | Live, shared |
 | Weather alerts + alert areas on the map | National Weather Service API | Live |
 | Current weather for campus | Open-Meteo | Live |
 | Parking: all 53 UTA parking areas highlighted on the map, garages labeled, student commuter zones, link to UTA Parking Finder for live counts | OpenStreetMap outlines + UTA PATS 2026–27 permit guide | Reference |
 | Study spots: busy / open status from student reports only (no estimate shown) | Crowd reports | Live, shared |
-| MavMover routes, stops, hours, "running now"; one tap to TripShot live bus tracking | UTA PATS schedule + TripShot link | Live |
+| MavMover live buses on the map and in the Shuttles tab: position, heading, riders on board, next stop and ETA | TripShot public rider feed via `relay/worker.js` (Cloudflare Worker) | Live when the relay is configured; otherwise schedule + TripShot link |
 | Official city road work (barricaded right-of-way permits) on the map and Home | City of Arlington public GIS | Live, refreshed every 30 min |
 | Union Pacific track line on the map | City of Arlington public GIS | Live |
 | Safety layer: reported offenses (last 30 days) and active police calls near campus | Arlington Police Department public data | Live (crime nightly, calls every 15 min) |
@@ -48,18 +50,20 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 | `logic.js` | Every rule as a pure, tested function (confirmation, expiry, anti-spam, schedule, notifications, points, brief) |
 | `citydata.js` | Read-only queries to the City of Arlington's public ArcGIS server (road work, rail line, police calls, crime) |
 | `parking-areas.js` | Outlines of every parking area inside the UTA campus boundary (OpenStreetMap) |
+| `detours.js` | Street-following detour routes around each crossing (OpenStreetMap/OSRM) |
+| `relay/worker.js` | Cloudflare Worker that lets the app read TripShot's public bus feed (CORS) |
 | `store.js` | `ReportStore` interface with two implementations: `FirebaseReportStore` (shared) and `LocalReportStore` (fallback). The UI only knows the interface. |
 | `script.js` | UI wiring for the five tabs, map layers and settings |
 | `firestore.rules` | Server-side security: report shape validation, only reporters/admins can delete, only admins post updates, nobody can make themselves admin |
 | `sw.js`, `manifest.webmanifest` | Installable PWA + offline app shell |
-| `tests.js`, `tests.html` | 65 automated tests |
+| `tests.js`, `tests.html` | 76 automated tests |
 
 ## Run and test
 
 No build step. Serve the folder with any static server, e.g. `python3 -m http.server`, then open `http://localhost:8000`.
 
 ```
-node tests.js        # 65 / 65 tests passed
+node tests.js        # 76 / 76 tests passed
 ```
 
 ## Shared backend setup (Firebase)

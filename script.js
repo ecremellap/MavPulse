@@ -107,6 +107,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         buzz(6);
         document.querySelector(".main-content").scrollTop = 0;
         if (id === "map" && map) setTimeout(() => map.invalidateSize(), 120);
+        if (id === "transit" && typeof loadLive === "function") loadLive();
     }
     window.addEventListener("resize", () => moveGlider(currentView));
     tabs.forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
@@ -233,19 +234,105 @@ document.addEventListener("DOMContentLoaded", async () => {
             map.flyToBounds(parkingBounds, { padding: [12, 12], duration: reduceMotion ? 0 : 0.8 });
         });
     }
+    // Shuttle layer: live TripShot route lines + moving buses when the
+    // relay is configured; otherwise the stops from UTA's schedule.
+    const busMarkers = new Map();
+    function busIcon(color, bearing, stale) {
+        return L.divIcon({
+            className: "mp-marker",
+            html: `<span class="bus-mk${stale ? " stale" : ""}" style="--route:${color}"><span class="bus-arrow" style="transform:rotate(${bearing}deg)"></span>${svg("bus", "mi")}</span>`,
+            iconSize: [30, 30], iconAnchor: [15, 15]
+        });
+    }
+    function tweenMarker(m, to) {
+        const from = m.getLatLng();
+        if (reduceMotion || from.distanceTo(to) > 1500) { m.setLatLng(to); return; }
+        const t0 = performance.now(), dur = 1200;
+        const step = t => {
+            const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+            m.setLatLng([from.lat + (to[0] - from.lat) * e, from.lng + (to[1] - from.lng) * e]);
+            if (k < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+    }
+    let shuttleBase = null;
     function drawShuttleLayer() {
         if (!map) return;
-        layers.shuttles.clearLayers();
-        const seen = new Map();
-        D.ROUTES.forEach(r => r.stops.forEach(s => {
-            const key = s.name;
-            if (!seen.has(key)) seen.set(key, { ...s, routes: [] });
-            seen.get(key).routes.push(r.name);
+        const live = state.live && state.live.ok ? Object.values(state.live.routes) : null;
+        if (!live) {
+            if (shuttleBase === "static") return;
+            layers.shuttles.clearLayers(); busMarkers.clear(); shuttleBase = "static";
+            const seen = new Map();
+            D.ROUTES.forEach(r => r.stops.forEach(st => {
+                if (!seen.has(st.name)) seen.set(st.name, { ...st, routes: [] });
+                seen.get(st.name).routes.push(r.name);
+            }));
+            seen.forEach(st => {
+                L.marker([st.lat, st.lng], { icon: dot("shuttles", "") })
+                    .bindPopup(popupHTML(st.name, [`MavMover: ${st.routes.join(", ")}`, "Shown at the named building; exact stop may differ."])).addTo(layers.shuttles);
+            });
+            return;
+        }
+        if (shuttleBase !== "live") {
+            layers.shuttles.clearLayers(); busMarkers.clear(); shuttleBase = "live";
+            live.forEach(r => {
+                if (r.path.length > 1) L.polyline(r.path, { color: r.color, weight: 4, opacity: 0.55, interactive: false }).addTo(layers.shuttles);
+                r.stops.forEach(st => L.circleMarker([st.lat, st.lng], { radius: 4, color: r.color, weight: 2, fillColor: "#fff", fillOpacity: 1 })
+                    .bindPopup(popupHTML(st.name, [`MavMover ${r.name}`])).addTo(layers.shuttles));
+            });
+        }
+        const seenIds = new Set();
+        live.forEach(r => r.buses.forEach(bus => {
+            seenIds.add(bus.id);
+            const lines = [
+                bus.nextStop ? (bus.etaMin === 0 ? `${bus.nextStop}` : `Next: ${bus.nextStop}${bus.etaMin !== null ? ` in ${bus.etaMin} min` : ""}`) : "In service",
+                bus.riders !== null ? `${bus.riders}${bus.capacity ? ` of ${bus.capacity}` : ""} riders on board` : "",
+                bus.delayed ? "Running behind schedule" : "", bus.stale ? "Position may be out of date" : ""
+            ].filter(Boolean);
+            const pop = popupHTML(`${r.name} · ${bus.name}`, lines);
+            let m = busMarkers.get(bus.id);
+            if (!m) {
+                m = L.marker([bus.lat, bus.lng], { icon: busIcon(r.color, bus.bearing, bus.stale), zIndexOffset: 1500 }).bindPopup(pop).addTo(layers.shuttles);
+                busMarkers.set(bus.id, m);
+            } else {
+                m.setIcon(busIcon(r.color, bus.bearing, bus.stale));
+                m.setPopupContent(pop);
+                tweenMarker(m, [bus.lat, bus.lng]);
+            }
         }));
-        seen.forEach(s => {
-            L.marker([s.lat, s.lng], { icon: dot("shuttles", "") })
-                .bindPopup(popupHTML(s.name, [`MavMover: ${s.routes.join(", ")}`, "Shown at the named building; exact stop may differ."])).addTo(layers.shuttles);
-        });
+        busMarkers.forEach((m, id) => { if (!seenIds.has(id)) { layers.shuttles.removeLayer(m); busMarkers.delete(id); } });
+        updateMapFooter();
+    }
+
+    // Live MavMover data through the MavPulse relay (relay/worker.js).
+    const RELAY = (window.MAVPULSE_SHUTTLE_RELAY || "").replace(/\/$/, "");
+    state.live = { ok: false, routes: {}, at: 0 };
+    const liveKey = name => { const k = String(name || "").toLowerCase().split(/\s+/)[0]; return k === "shopping" ? "green" : k; };
+    let liveBusy = false;
+    async function loadLive() {
+        if (!RELAY || liveBusy || document.visibilityState === "hidden") return;
+        liveBusy = true;
+        try {
+            const day = new Date().toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+            const list = await (await fetch(`${RELAY}/v1/p/shared/route?includePreviousDayRidesSpanningMidnight=true&startDay=${day}&endDay=${day}&regionId=${D.LINKS.tripshotRegion}`)).json();
+            const ids = (list.routes || []).map(r => (r.InternalRoute || r).routeId).filter(Boolean);
+            const details = await Promise.all(ids.map(id => fetch(`${RELAY}/v3/p/shared/route/${id}?day=${day}&breakupExactLoops=true&includePreviousDayRidesSpanningMidnight=true`).then(r => r.ok ? r.json() : null).catch(() => null)));
+            const routes = {};
+            details.forEach(dj => { const r = MP.parseTripShotRoute(dj, Date.now()); if (r) routes[liveKey(r.name)] = r; });
+            if (!Object.keys(routes).length) throw new Error("No routes returned");
+            state.live = { ok: true, routes, at: Date.now() };
+        } catch (e) {
+            console.warn("Live MavMover data unavailable", e);
+            state.live = { ...state.live, ok: Object.keys(state.live.routes).length > 0 && Date.now() - state.live.at < 120000 };
+        } finally { liveBusy = false; }
+        drawShuttleLayer();
+        renderRoutes();
+    }
+    // Poll fast only while someone is looking at buses.
+    function scheduleLive() {
+        if (!RELAY) return;
+        const watching = currentView === "transit" || (map && map.hasLayer(layers.shuttles));
+        setTimeout(async () => { await loadLive(); scheduleLive(); }, watching ? 15000 : 60000);
     }
     function drawStudyLayer() {
         if (!map) return;
@@ -256,18 +343,60 @@ document.addEventListener("DOMContentLoaded", async () => {
                 .bindPopup(popupHTML(s.name, [studyLabel(s, st)])).addTo(layers.study);
         });
     }
+    let detourBounds = null;
     function drawCrossingLayer() {
         if (!map) return;
         layers.crossings.clearLayers();
-        D.CROSSINGS.forEach(c => {
-            const s = MP.crossingState(allReports(), c.id, now());
-            const cls = s.state === "clear" ? "crossing-clear" : "crossing-blocked";
-            const lines = [s.state === "clear" ? "No train reported" : `${s.state === "confirmed" ? "Blocked, confirmed" : "Reported blocked"} · ${MP.minutesAgo(s.lastAt, now())}`];
-            if (s.state !== "clear") lines.push(`Detour: ${c.detour}`);
-            const m = L.marker([c.lat, c.lng], { icon: dot(cls, svg("train", "mi")), zIndexOffset: s.state === "clear" ? 0 : 1000 })
-                .bindPopup(popupHTML(`${c.name} rail crossing`, lines)).addTo(layers.crossings);
-            if (s.state !== "clear") m.bindTooltip(s.state === "confirmed" ? "BLOCKED" : "Reported", { permanent: true, direction: "top", className: "blocked-tip", offset: [0, -10] });
+        detourBounds = null;
+        const cs = crossingStates();
+        const hit = cs.filter(c => c.state !== "clear");
+        // The train itself: a red band along the track between the outermost
+        // affected crossings (the line runs nearly straight east–west here).
+        if (hit.length) {
+            const ordered = cs.slice().sort((x, y) => x.lng - y.lng);
+            const iA = ordered.findIndex(c => c.state !== "clear");
+            const iB = ordered.length - 1 - ordered.slice().reverse().findIndex(c => c.state !== "clear");
+            const seg = ordered.slice(iA, iB + 1).map(c => [c.lat, c.lng]);
+            if (seg.length === 1) seg.push([seg[0][0] + 0.00005, seg[0][1] + 0.0012]), seg.unshift([seg[0][0] - 0.00005, seg[0][1] - 0.0012]);
+            L.polyline(seg, { color: "#fff", weight: 13, opacity: 0.9, interactive: false }).addTo(layers.crossings);
+            L.polyline(seg, { color: "#d62f0d", weight: 8, opacity: 0.95, dashArray: "16 6", className: "train-band" })
+                .bindPopup(popupHTML("Train on the tracks", [`Reported at ${hit.filter(c => c.state !== "likely").map(c => c.name).join(", ")}`, "Union Pacific freight trains can be over 2 km long, so nearby crossings are likely blocked too."]))
+                .addTo(layers.crossings);
+        }
+        // Detour for each crossing someone actually reported (not "likely").
+        const seenVia = new Set();
+        hit.filter(c => c.state !== "likely").forEach(c => {
+            const d = window.MP_DETOURS && window.MP_DETOURS.DETOURS[c.id];
+            if (!d) return;
+            L.polyline(d.path, { color: "#fff", weight: 10, opacity: 0.95, interactive: false }).addTo(layers.crossings);
+            const line = L.polyline(d.path, { color: "#1e8e5a", weight: 6, opacity: 1, className: "detour-line" })
+                .bindPopup(popupHTML(`Detour around ${c.name}`, [`Through the ${d.via.name}, which a train can't block`, `About ${(d.meters / 1609).toFixed(1)} mi`]))
+                .addTo(layers.crossings);
+            detourBounds = detourBounds ? detourBounds.extend(line.getBounds()) : line.getBounds();
+            detourBounds.extend([d.via.lat - 0.0012, d.via.lng]); // room for the underpass label
+            if (!seenVia.has(d.via.name)) {
+                seenVia.add(d.via.name);
+                L.marker([d.via.lat, d.via.lng], { icon: dot("underpass", svg("check", "mi")), zIndexOffset: 1200 })
+                    .bindTooltip(`Open: ${d.via.name}`, { permanent: true, direction: "bottom", className: "underpass-tip", offset: [0, 12] })
+                    .bindPopup(popupHTML(d.via.name, ["Goes under/over the tracks, so trains never block it."]))
+                    .addTo(layers.crossings);
+            }
         });
+        cs.forEach(c => {
+            const cls = c.state === "clear" ? "crossing-clear" : c.state === "likely" ? "crossing-likely" : "crossing-blocked";
+            const lines = [c.state === "clear" ? "No train reported"
+                : c.state === "likely" ? `Likely blocked: train reported at ${c.cause}, ${(c.distanceM / 1000).toFixed(1)} km away`
+                : `${c.state === "confirmed" ? "Blocked, confirmed" : "Reported blocked"} · ${MP.minutesAgo(c.lastAt, now())}`];
+            if (c.state !== "clear") lines.push(c.detour);
+            const m = L.marker([c.lat, c.lng], { icon: dot(cls, svg("train", "mi")), zIndexOffset: c.state === "clear" ? 0 : 1000 })
+                .bindPopup(popupHTML(`${c.name} rail crossing`, lines)).addTo(layers.crossings);
+            if (c.state !== "clear") m.bindTooltip(c.state === "confirmed" ? "BLOCKED" : c.state === "likely" ? "LIKELY" : "REPORTED", { permanent: true, direction: "top", className: `blocked-tip ${c.state}`, offset: [0, -10] });
+        });
+    }
+    function showDetour() {
+        switchView("map");
+        if (!map.hasLayer(layers.crossings)) document.querySelector('.filter-chip[data-layer="crossings"]').click();
+        setTimeout(() => { if (detourBounds) map.flyToBounds(detourBounds, { padding: [16, 16], duration: reduceMotion ? 0 : 0.8 }); }, 150);
     }
     function drawClosureLayer(closures) {
         if (!map) return;
@@ -284,8 +413,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     //  CROSSINGS (Home list + Report buttons + alerts)
     // ======================================================================
     const prevCrossing = {};
+    // Reports per crossing, then the long-train rule spreads "likely blocked"
+    // to neighbours within a train's length (logic.spreadTrain).
     function crossingStates() {
-        return D.CROSSINGS.map(c => ({ ...c, ...MP.crossingState(allReports(), c.id, now()) }));
+        return MP.spreadTrain(D.CROSSINGS.map(c => ({ ...c, ...MP.crossingState(allReports(), c.id, now()) })));
     }
     function renderCrossings() {
         const list = $("crossing-list");
@@ -298,13 +429,15 @@ document.addEventListener("DOMContentLoaded", async () => {
             const left = el("div", "crossing-left");
             left.appendChild(el("div", "crossing-name", c.name));
             const sub = c.state === "clear" ? "Clear"
+                : c.state === "likely" ? `Likely blocked · same train as ${c.cause}`
                 : c.state === "confirmed" ? `Blocked, confirmed by ${c.reporters} · ${MP.minutesAgo(c.lastAt, now())}`
                 : `1 report · ${MP.minutesAgo(c.lastAt, now())} · needs one more`;
             left.appendChild(el("div", "crossing-sub", sub));
-            const btn = el("button", "row-btn " + (c.state === "clear" ? "" : "ok"), c.state === "clear" ? "Train here" : "It's clear");
+            const reportable = c.state === "clear" || c.state === "likely";
+            const btn = el("button", "row-btn " + (reportable ? "" : "ok"), reportable ? (c.state === "likely" ? "Confirm" : "Train here") : "It's clear");
             btn.type = "button";
-            btn.setAttribute("aria-label", `${c.state === "clear" ? "Report a train at" : "Mark clear:"} ${c.name}`);
-            btn.addEventListener("click", () => reportCrossing(c.id, c.state === "clear" ? "blocked" : "clear"));
+            btn.setAttribute("aria-label", `${reportable ? "Report a train at" : "Mark clear:"} ${c.name}`);
+            btn.addEventListener("click", () => reportCrossing(c.id, reportable ? "blocked" : "clear"));
             row.append(lamp, left, btn);
             list.appendChild(row);
         });
@@ -312,7 +445,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Big alert cards for blocked crossings (replaces the old hardcoded card)
         const alerts = $("crossing-alerts");
         alerts.innerHTML = "";
-        crossingStates().filter(c => c.state !== "clear").forEach(c => {
+        const allCs = crossingStates();
+        const likelyNames = allCs.filter(c => c.state === "likely").map(c => c.name);
+        allCs.filter(c => c.state === "reported" || c.state === "confirmed").forEach(c => {
             const card = el("div", "orange-card" + (c.state === "reported" ? " unconfirmed" : ""));
             const badge = el("div", "card-badge");
             badge.innerHTML = '<span class="pulse-dot"></span>';
@@ -320,10 +455,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             card.appendChild(badge);
             card.appendChild(el("h3", null, `${c.name} rail crossing`));
             const sim = state.simReports.some(r => r.targetId === c.id) ? " (simulated)" : "";
-            card.appendChild(el("p", null, `${c.state === "confirmed" ? `Confirmed by ${c.reporters} commuters` : "One commuter reported a train"} · ${MP.minutesAgo(c.lastAt, now())}${sim}. ${c.detour}.`));
+            card.appendChild(el("p", null, `${c.state === "confirmed" ? `Confirmed by ${c.reporters} commuters` : "One commuter reported a train"} · ${MP.minutesAgo(c.lastAt, now())}${sim}.${likelyNames.length ? ` Long train: ${likelyNames.join(", ")} likely blocked too.` : ""} ${c.detour}.`));
             const actions = el("div", "card-actions");
-            const show = el("button", "btn-dark", "Show on map"); show.type = "button";
-            show.addEventListener("click", () => { switchView("map"); if (map) map.setView([c.lat, c.lng], 16); });
+            const show = el("button", "btn-dark", "Show detour"); show.type = "button";
+            show.addEventListener("click", showDetour);
             const same = el("button", "btn-outline", c.state === "confirmed" ? "It's clear now" : "I see it too"); same.type = "button";
             same.addEventListener("click", () => reportCrossing(c.id, c.state === "confirmed" ? "clear" : "blocked"));
             actions.append(show, same);
@@ -335,11 +470,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         const grid = $("report-crossing-grid");
         grid.innerHTML = "";
         crossingStates().forEach(c => {
-            const b = el("button", "big-btn " + (c.state === "clear" ? "" : "is-blocked"));
+            const b = el("button", "big-btn " + (c.state === "clear" ? "" : c.state === "likely" ? "is-likely" : "is-blocked"));
             b.type = "button";
             b.appendChild(el("span", "big-btn-title", c.name));
-            b.appendChild(el("span", "big-btn-sub", c.state === "clear" ? "Tap: train here" : "Tap: it's clear"));
-            b.addEventListener("click", () => reportCrossing(c.id, c.state === "clear" ? "blocked" : "clear"));
+            const reportable = c.state === "clear" || c.state === "likely";
+            b.appendChild(el("span", "big-btn-sub", c.state === "likely" ? "Likely blocked · tap to confirm" : reportable ? "Tap: train here" : "Tap: it's clear"));
+            b.addEventListener("click", () => reportCrossing(c.id, reportable ? "blocked" : "clear"));
             grid.appendChild(b);
         });
     }
@@ -526,28 +662,55 @@ document.addEventListener("DOMContentLoaded", async () => {
     $("tripshot-link").href = D.LINKS.tripshot;
     function renderRoutes() {
         const list = $("route-list");
+        const openIds = new Set([...list.querySelectorAll("details[open]")].map(x => x.dataset.route));
         list.innerHTML = "";
         const d = new Date();
-        let running = 0;
+        let running = 0, liveBuses = 0;
         D.ROUTES.forEach(r => {
             const st = MP.routeStatus(r, d);
-            if (st.running) running += 1;
-            const card = el("details", "route-card" + (st.running ? " running" : ""));
+            const live = state.live.ok ? state.live.routes[r.id] : null;
+            const buses = live ? live.buses : [];
+            liveBuses += buses.length;
+            if (st.running || buses.length) running += 1;
+            const card = el("details", "route-card" + (st.running || buses.length ? " running" : ""));
+            card.dataset.route = r.id;
+            if (openIds.has(r.id)) card.open = true;
             const sum = el("summary");
-            const badge = el("span", "route-badge"); badge.style.background = r.color;
-            sum.append(badge, el("span", "route-name", r.name), el("span", "route-status", st.label));
+            const badge = el("span", "route-badge"); badge.style.background = (live && live.color) || r.color;
+            const status = buses.length ? `${buses.length} bus${buses.length === 1 ? "" : "es"} live` : st.label;
+            const statusEl = el("span", "route-status" + (buses.length ? " live" : ""), status);
+            sum.append(badge, el("span", "route-name", r.name), statusEl);
             card.appendChild(sum);
-            if (r.stops.length) {
+            buses.forEach(bus => {
+                const row = el("div", "bus-row");
+                const ic = el("span", "bus-chip"); ic.style.setProperty("--route", (live && live.color) || r.color); ic.innerHTML = svg("bus", "mi");
+                const txt = el("div", "bus-text");
+                txt.appendChild(el("strong", null, bus.nextStop ? (bus.etaMin === 0 ? bus.nextStop : `${bus.nextStop}${bus.etaMin !== null ? ` · ${bus.etaMin === 0 ? "now" : bus.etaMin + " min"}` : ""}`) : bus.name));
+                txt.appendChild(el("span", null, [bus.name, bus.riders !== null ? `${bus.riders}${bus.capacity ? "/" + bus.capacity : ""} riders` : "", bus.delayed ? "running late" : ""].filter(Boolean).join(" · ")));
+                const go = el("button", "pill-btn", "Map"); go.type = "button";
+                go.addEventListener("click", () => {
+                    if (!map.hasLayer(layers.shuttles)) document.querySelector('.filter-chip[data-layer="shuttles"]').click();
+                    switchView("map"); setTimeout(() => { map.flyTo([bus.lat, bus.lng], 17, { duration: reduceMotion ? 0 : 0.8 }); const m = busMarkers.get(bus.id); if (m) setTimeout(() => m.openPopup(), reduceMotion ? 0 : 850); }, 150);
+                });
+                row.append(ic, txt, go);
+                card.appendChild(row);
+            });
+            const stops = live && live.stops.length ? live.stops : r.stops;
+            if (stops.length) {
                 const line = el("ol", "route-line");
-                line.style.setProperty("--route", r.color);
-                r.stops.forEach(stop => line.appendChild(el("li", null, stop.name)));
+                line.style.setProperty("--route", (live && live.color) || r.color);
+                stops.forEach(stop => line.appendChild(el("li", null, stop.name)));
                 card.appendChild(line);
             } else {
                 card.appendChild(el("div", "route-stops", "Evening route. Stops are listed in TripShot."));
             }
             list.appendChild(card);
         });
-        $("transit-updated").textContent = `${running} of ${D.ROUTES.length} routes in service now · ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+        const when = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+        $("transit-updated").textContent = state.live.ok
+            ? `Live · ${liveBuses} bus${liveBuses === 1 ? "" : "es"} on the road · updated ${new Date(state.live.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`
+            : `${running} of ${D.ROUTES.length} routes in service now · ${when}`;
+        $("transit-updated").classList.toggle("live", state.live.ok);
         return running;
     }
 
@@ -974,7 +1137,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let watchId = null, meMarker = null, meCircle = null, followMe = true, lastHazardKey = "";
     function hazardList() {
         const h = [];
-        crossingStates().filter(c => c.state !== "clear").forEach(c => h.push({ lat: c.lat, lng: c.lng, label: `${c.name} rail crossing ${c.state === "confirmed" ? "blocked" : "reported blocked"}`, tip: c.detour }));
+        crossingStates().filter(c => c.state !== "clear").forEach(c => h.push({ lat: c.lat, lng: c.lng, label: `${c.name} rail crossing ${c.state === "confirmed" ? "blocked" : c.state === "likely" ? "likely blocked" : "reported blocked"}`, tip: c.detour }));
         MP.activeClosures(allReports(), now()).forEach(c => h.push({ lat: c.lat, lng: c.lng, label: `${(D.CLOSURE_KINDS.find(k => k.id === c.kind) || {}).label || "Closure"} at ${c.label}` }));
         (state.roadWork || []).forEach(w => { const p = w.paths[0] && w.paths[0][0]; if (p) h.push({ lat: p[1], lng: p[0], label: `City road work: ${w.segments[0] || w.kind}` }); });
         return h;
@@ -1062,6 +1225,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadNws();
     loadRoadWork();
     loadRail();
+    loadLive().then(scheduleLive);
 
     // Connect the store (shared backend if configured, else on-device).
     const { store: s, info } = await window.MP_STORE.createReportStore(window.MAVPULSE_FIREBASE_CONFIG);

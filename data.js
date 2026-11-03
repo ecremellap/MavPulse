@@ -19,12 +19,12 @@
 
     // Union Pacific at-grade crossings closest to campus, west to east.
     const CROSSINGS = [
-        { id: "bowen",    name: "Bowen Rd",      lat: 32.73408, lng: -97.14915, detour: "Use the Fielder Rd or Davis Dr crossing" },
-        { id: "davis",    name: "Davis Dr",      lat: 32.73788, lng: -97.12325, detour: "Use the Cooper St crossing" },
-        { id: "cooper",   name: "Cooper St",     lat: 32.73754, lng: -97.11444, detour: "Use the Davis Dr or Center St crossing" },
-        { id: "center",   name: "Center St",     lat: 32.73727, lng: -97.10702, detour: "Use the Cooper St crossing" },
-        { id: "mesquite", name: "Mesquite St",   lat: 32.73723, lng: -97.10578, detour: "Use the Cooper St crossing" },
-        { id: "collins",  name: "Collins St",    lat: 32.73692, lng: -97.09733, detour: "Use the Cooper St crossing" }
+        { id: "bowen",    name: "Bowen Rd",      lat: 32.73408, lng: -97.14915, detour: "Use the Fielder Rd bridge over the tracks" },
+        { id: "davis",    name: "Davis Dr",      lat: 32.73788, lng: -97.12325, detour: "Use the West St underpass (goes under the tracks)" },
+        { id: "cooper",   name: "Cooper St",     lat: 32.73754, lng: -97.11444, detour: "Use the West St underpass (goes under the tracks)" },
+        { id: "center",   name: "Center St",     lat: 32.73727, lng: -97.10702, detour: "Use the West St underpass (goes under the tracks)" },
+        { id: "mesquite", name: "Mesquite St",   lat: 32.73723, lng: -97.10578, detour: "Use the West St underpass (goes under the tracks)" },
+        { id: "collins",  name: "Collins St",    lat: 32.73692, lng: -97.09733, detour: "Use the West St underpass (goes under the tracks)" }
     ];
 
     // Parking. The outlines of all UTA parking areas live in parking-areas.js
@@ -101,22 +101,23 @@
     const stop = (name, key) => ({ name, lat: STOP[key][0], lng: STOP[key][1] });
 
     const ROUTES = [
-        { id: "express", name: "Express", color: "#6b7280", start: 450, end: 1080,
+        { id: "express", name: "Express", color: "#E80E8A", start: 450, end: 1080,
           stops: [stop("Lot 27 / Studio Arts", "lot27"), stop("Arbor Oaks", "arbor"), stop("Greek Row", "greek"), stop("University Center", "uc"), stop("MAC", "mac"), stop("P.E. Building", "pe")] },
-        { id: "orange", name: "Orange", color: "#ea580c", start: 450, end: 1080,
+        { id: "orange", name: "Orange", color: "#F58025", start: 450, end: 1080,
           stops: [stop("Lot 27 / Studio Arts", "lot27"), stop("Lot 26 / Maverick Stadium", "lot26"), stop("Maverick Place", "mavPlace"), stop("848 Mitchell", "m848"), stop("Pickard Hall", "pickard"), stop("College of Business", "business"), stop("Smart Hospital", "smart")] },
-        { id: "blue", name: "Blue", color: "#2563eb", start: 450, end: 1080,
+        { id: "blue", name: "Blue", color: "#0064B1", start: 450, end: 1080,
           stops: [stop("University Center", "uc"), stop("MAC", "mac"), stop("Greek Row", "greek"), stop("Meadow Run", "meadow"), stop("Swift Center", "swift"), stop("Timber Brook", "timber")] },
-        { id: "black", name: "Black", color: "#111827", start: 450, end: 1080,
+        { id: "black", name: "Black", color: "#000000", start: 450, end: 1080,
           stops: [stop("Lot 53", "lot53"), stop("Lot 52", "lot52"), stop("Lot 50", "lot50"), stop("College of Business", "business")] },
-        { id: "yellow", name: "Yellow", color: "#ca8a04", start: 450, end: 1080,
+        { id: "yellow", name: "Yellow", color: "#E6C800", start: 450, end: 1080,
           stops: [stop("Liv+", "liv"), stop("University Center", "uc"), stop("Arlington Hall", "arlHall"), stop("College of Business", "business")] },
-        { id: "red", name: "Red (evening)", color: "#dc2626", start: 1080, end: 1260, stops: [] },
-        { id: "green", name: "Green (evening)", color: "#16a34a", start: 1110, end: 1350, stops: [] }
+        { id: "red", name: "Red (evening)", color: "#FF0000", start: 1080, end: 1260, stops: [] },
+        { id: "green", name: "Green (evening)", color: "#38B34A", start: 1110, end: 1350, stops: [] }
     ];
 
     const LINKS = {
         tripshot: "https://uta.tripshot.com",
+        tripshotRegion: "CA558DDC-D7F2-4B48-9CAC-DEEA1134F820",
         mavmover: "https://www.uta.edu/pats/transportation/mav-mover-shuttles.php",
         parkingFinder: "https://go.uta.edu/park",
         teamEmail: "mailto:krm3798@mavs.uta.edu?subject=MavPulse%20admin%20volunteer",

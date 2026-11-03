@@ -228,12 +228,15 @@
             lines.push({ icon: "alert", text: `${alerts[0].event}${alerts.length > 1 ? ` (+${alerts.length - 1} more)` : ""}` });
             if (level !== "bad") level = "warn";
         }
-        const blocked = (crossings || []).filter(c => c.state !== "clear");
+        const blocked = (crossings || []).filter(c => c.state === "reported" || c.state === "confirmed");
+        const likely = (crossings || []).filter(c => c.state === "likely");
         if (blocked.length) {
             blocked.forEach(c => lines.push({
                 icon: "train",
                 text: `${c.name} crossing ${c.state === "confirmed" ? "blocked (confirmed)" : "reported blocked"} · ${minutesAgo(c.lastAt, now)}`
             }));
+            if (likely.length) lines.push({ icon: "train", text: `Long train: ${likely.map(c => c.name).join(", ")} likely blocked too` });
+            lines.push({ icon: "check", text: blocked.some(c => c.id === "bowen") && blocked.length === 1 ? "Detour: Fielder Rd bridge goes over the tracks" : "Detour: West St underpass goes under the tracks" });
             level = "bad";
         } else {
             lines.push({ icon: "train", text: "No blocked rail crossings reported" });
@@ -342,11 +345,86 @@
             .filter(h => h.meters <= radiusM).sort((a, b) => a.meters - b.meters);
     }
 
+
+    // =================================================================
+    //  Long trains: one train blocks several crossings
+    //  Union Pacific freight trains on this line are often 1.5–2.5 km
+    //  long, so a train stopped at one crossing usually blocks the
+    //  neighbours too. Crossings within TRAIN_REACH_M of a reported one
+    //  become "likely" blocked (never "confirmed" without reports).
+    // =================================================================
+    const TRAIN_REACH_M = 2000;
+    function spreadTrain(crossings) {
+        const list = (crossings || []).map(c => ({ ...c }));
+        const sources = list.filter(c => c.state === "reported" || c.state === "confirmed");
+        list.forEach(c => {
+            if (c.state !== "clear") return;
+            let best = null;
+            sources.forEach(src => {
+                const d = distanceMeters(c, src);
+                if (d <= TRAIN_REACH_M && (!best || d < best.d)) best = { d, src };
+            });
+            if (best) Object.assign(c, { state: "likely", cause: best.src.name, causeId: best.src.id, lastAt: best.src.lastAt, distanceM: Math.round(best.d) });
+        });
+        return list;
+    }
+
+    // =================================================================
+    //  MavMover live buses (TripShot public rider feed)
+    // =================================================================
+
+    // Google encoded polyline -> [[lat, lng], ...]
+    function decodePolyline(str) {
+        const pts = []; let i = 0, lat = 0, lng = 0;
+        while (i < (str || "").length) {
+            for (const which of [0, 1]) {
+                let shift = 0, result = 0, b;
+                do { b = str.charCodeAt(i++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20 && i < str.length + 1);
+                const delta = (result & 1) ? ~(result >> 1) : (result >> 1);
+                if (which === 0) lat += delta; else lng += delta;
+            }
+            pts.push([lat / 1e5, lng / 1e5]);
+        }
+        return pts;
+    }
+
+    // One TripShot route-detail response -> what the app shows.
+    function parseTripShotRoute(json, now) {
+        const d = json && json.InternalRouteDetails;
+        if (!d || !d.route) return null;
+        const t = (d.inexactTimetables && d.inexactTimetables[0]) || (d.exactTimetables && d.exactTimetables[0]) || {};
+        const stops = (t.stops || []).map(s => ({ id: String(s.stopId).toLowerCase(), name: s.name, lat: s.location && s.location.lt, lng: s.location && s.location.lg }))
+            .filter(s => typeof s.lat === "number");
+        const stopName = id => { const s = stops.find(x => x.id === String(id).toLowerCase()); return s ? s.name : "next stop"; };
+        const path = [];
+        ((t.navigations && t.navigations[0] && t.navigations[0].legs) || []).forEach(leg => (leg.steps || []).forEach(step => path.push(...decodePolyline(step.polyline))));
+        const buses = (t.liveRides || []).map(lr => {
+            const v = lr.vehicleStatus || {};
+            if (!v.location || typeof v.location.lt !== "number") return null;
+            const next = ((lr.ride && lr.ride.stopStatus) || []).map(x => { const k = Object.keys(x)[0]; return { kind: k, ...x[k] }; })
+                .find(x => x.kind === "Awaiting" || x.kind === "Present");
+            const eta = next && next.expectedArrivalTime ? Math.max(0, Math.round((new Date(next.expectedArrivalTime).getTime() - now) / 60000)) : null;
+            const seenSec = v.when ? Math.round((now - new Date(v.when).getTime()) / 1000) : null;
+            return {
+                id: v.vehicleId, name: v.name || "Bus", lat: v.location.lt, lng: v.location.lg,
+                bearing: typeof v.bearing === "number" ? v.bearing : 0,
+                riders: typeof v.apcOccupancy === "number" ? v.apcOccupancy : null,
+                capacity: lr.vehicle && lr.vehicle.capacity || null,
+                nextStop: next ? (next.kind === "Present" ? `At ${stopName(next.stopId)}` : stopName(next.stopId)) : null,
+                etaMin: next && next.kind === "Awaiting" ? eta : next ? 0 : null,
+                delayed: !!(next && next.riderStatus === "Delayed"),
+                stale: seenSec !== null && seenSec > 180
+            };
+        }).filter(Boolean);
+        return { id: d.route.routeId, name: d.route.name, short: d.route.shortName, color: d.route.color || "#0057a8", stops, path, buses };
+    }
+
     const LOGIC = {
         RULES, shouldConfirmCrossingAlert, crossingState, createClosureReport, activeReports,
         activeClosures, latestStatus, canReport, studyStatus, routeStatus, filterCampusAlerts, shouldNotify, contributorStats,
         buildBrief, minutesAgo, distanceMeters, nearest,
-        activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards
+        activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards,
+        TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute
     };
     root.MP = LOGIC;
     // Back-compat names used by the Iteration 2 tests.
