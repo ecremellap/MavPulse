@@ -1333,3 +1333,41 @@ button:active, .tripshot-card:active, a.pill-btn:active { transform: scale(0.96)
     *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
     .splash { display: none; }
 }
+
+/* Weather refresh: spins while loading, card pulses once when fresh */
+#weather-refresh .i { transition: transform 0.3s var(--ease-out); }
+#weather-refresh.loading .i { animation: spin 0.8s linear infinite; }
+#weather-refresh:disabled { opacity: 1; cursor: progress; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.weather-strip.refreshed { animation: freshPulse 0.9s var(--ease-out); }
+@keyframes freshPulse { 0% { box-shadow: 0 0 0 0 rgba(0,87,168,0.35); border-color: var(--mav-blue); } 100% { box-shadow: 0 0 0 10px rgba(0,87,168,0); } }
+
+/* Parking: UTA areas highlighted, garage guide */
+.legend-swatch.parking-area { width: 14px; height: 10px; background: rgba(59,130,246,0.35); border: 1.5px solid #0057a8; border-radius: 2px; }
+.leaflet-tooltip.garage-tip { background: #00407c; color: #fff; border: none; font-weight: 800; font-size: 11px; padding: 2px 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
+.leaflet-tooltip.garage-tip::before { display: none; }
+.parking-panel { margin: 4px 16px 18px; }
+.parking-panel[hidden] { display: none; }
+.parking-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.parking-head .section-title { margin-top: 14px; }
+.parking-head .small-btn { margin-top: 10px; }
+.garage-list { background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.garage-row { display: flex; gap: 12px; align-items: flex-start; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--line); padding: 12px; cursor: pointer; color: var(--ink); }
+.garage-row:last-child { border-bottom: none; }
+.garage-row:hover { background: #f5f8fc; }
+.garage-icon { width: 34px; height: 34px; border-radius: 9px; background: var(--mav-blue); color: #fff; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 34px; }
+.garage-icon .i { width: 19px; height: 19px; }
+.garage-text { display: flex; flex-direction: column; gap: 2px; }
+.garage-text strong { font-size: 14.5px; }
+.garage-text span { font-size: 12.5px; color: var(--ink-2); line-height: 1.4; }
+.zone-title { font-size: 15px; font-weight: 800; margin: 18px 0 8px; color: var(--ink); }
+.zone-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.zone-row { background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--mav-blue); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 3px; }
+.zone-row strong { font-size: 13.5px; color: var(--ink); }
+.zone-row span { font-size: 12px; color: var(--ink-2); line-height: 1.4; }
+.zone-west { border-top-color: #0057a8; } .zone-east { border-top-color: #f26b1d; } .zone-south { border-top-color: #1e8e5a; } .zone-remote { border-top-color: #6b7a8f; }
+.parking-finder { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; background: var(--mav-blue); color: #fff; border-radius: 14px; padding: 14px 16px; text-decoration: none; }
+.parking-finder strong { display: block; font-size: 15px; }
+.parking-finder span span { font-size: 12px; opacity: 0.9; }
+
+.garages-far .leaflet-tooltip.garage-tip.cp:not(.cp-main) { display: none; }

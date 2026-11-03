@@ -14,6 +14,7 @@
     const MP = inNode ? require("./logic.js") : window.MP;
     const D = inNode ? require("./data.js") : window.MP_DATA;
     const STORE = inNode ? require("./store.js") : window.MP_STORE;
+    const AREAS = inNode ? require("./parking-areas.js") : window.MP_PARKING_AREAS;
 
     const results = [];
     const pending = [];
@@ -232,6 +233,27 @@
     test("Brief: a relayed UTA MavAlert puts the brief in alert state", () => {
         const b = MP.buildBrief({ alerts: [], crossings: [], closures: [], mavAlerts: [{ title: "Campus closed" }], now: T0 });
         eq(b.level, "bad"); eq(b.lines[0].text, "UTA MavAlert: Campus closed");
+    });
+
+
+    // ===================== parking (real UTA areas only) =====================
+    test("Parking: every highlighted area is a real outline inside the UTA campus area", () => {
+        assert(AREAS.length >= 50, `only ${AREAS.length} areas`);
+        AREAS.forEach(a => {
+            assert(a.poly.length >= 4, `area ${a.id} has no outline`);
+            a.poly.forEach(([la, ln]) => assert(la > 32.720 && la < 32.737 && ln > -97.133 && ln < -97.105, `area ${a.id} outside campus`));
+        });
+    });
+    test("Parking: every named garage matches an outline on the map", () => {
+        D.PARKING.forEach(g => assert(AREAS.some(a => a.id === g.osm && a.kind === "garage"), `${g.name} has no outline`));
+    });
+    test("Parking: no lot numbers are guessed onto outlines", () => {
+        AREAS.forEach(a => assert(!/\bLot\s*\d/i.test(a.name), `area ${a.id} has a guessed lot number`));
+    });
+    test("Parking: the four student zones come from the 2026-27 permit guide", () => {
+        eq(D.PARKING_ZONES.length, 4);
+        assert(D.PARKING_ZONES.find(z => z.id === "south").places.includes("49"), "Lot 49 is in Commuter South");
+        assert(D.PARKING_ZONES.find(z => z.id === "west").places.includes("West Campus Garage"), "West Campus Garage is in Commuter West");
     });
 
     // ===================== ReportStore (on-device) =====================

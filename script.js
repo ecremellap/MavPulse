@@ -137,6 +137,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 btn.classList.toggle("active", on);
                 if (on) layers[key].addTo(map); else map.removeLayer(layers[key]);
                 if (key === "safety") { $("safety-card").hidden = !on; if (on) loadSafety(); }
+                if (key === "parking") $("parking-panel").hidden = !on;
                 updateMapFooter();
             });
         });
@@ -166,15 +167,70 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // Static layers: parking, shuttles, study markers
+    // Every UTA parking area as a shaded outline; garages also get a label.
+    let parkingBounds = null;
+    const parkingShapes = {};
     function drawParkingLayer() {
+        if (!map || layers.parking.getLayers().length) return; // static: draw once
+        const areas = window.MP_PARKING_AREAS || [];
+        areas.forEach(a => {
+            const garage = D.PARKING.find(g => g.osm === a.id);
+            const shape = L.polygon(a.poly, {
+                color: garage ? "#00407c" : "#0057a8", weight: garage ? 2.5 : 1.5,
+                fillColor: garage ? "#0057a8" : "#3b82f6", fillOpacity: garage ? 0.55 : 0.32
+            });
+            const lines = garage ? [garage.kind, garage.who] : [a.name && a.name !== "UTA Parking" ? a.name : "UTA parking lot", "Check the posted sign for which permits may park here."];
+            const link = el("a", "pop-link", "Live counts in UTA Parking Finder"); link.href = D.LINKS.parkingFinder; link.target = "_blank"; link.rel = "noopener";
+            shape.bindPopup(popupHTML(garage ? garage.name : "UTA parking", lines, link));
+            if (garage) shape.bindTooltip(garage.name.replace(/ \(.*\)/, ""), { permanent: true, direction: "center", className: `garage-tip${garage.id.startsWith("cp-") ? " cp" : ""}${garage.id === "cp-central" ? " cp-main" : ""}` });
+            shape.addTo(layers.parking);
+            if (garage) parkingShapes[garage.id] = shape;
+            parkingBounds = parkingBounds ? parkingBounds.extend(shape.getBounds()) : shape.getBounds();
+        });
+    }
+    // The three College Park garages sit side by side: zoomed out they share
+    // one label, zoomed in each gets its own.
+    function updateGarageLabels() {
         if (!map) return;
-        layers.parking.clearLayers();
-        D.PARKING.forEach(lot => {
-            const st = MP.latestStatus(allReports(), "lot", lot.id, now(), MP.RULES.LOT_TTL_MS);
-            const cls = st ? (st.status === "full" ? "lot-full" : "lot-open") : "parking";
-            const lines = [lot.kind, st ? `${st.status === "full" ? "Reported FULL" : "Reported spaces open"} · ${MP.minutesAgo(st.at, now())}` : "No recent report"];
-            const a = el("a", "pop-link", "Live counts in UTA Parking Finder"); a.href = D.LINKS.parkingFinder; a.target = "_blank"; a.rel = "noopener";
-            L.marker([lot.lat, lot.lng], { icon: dot(cls, "P") }).bindPopup(popupHTML(lot.name, lines, a)).addTo(layers.parking);
+        const close = map.getZoom() >= 17;
+        map.getContainer().classList.toggle("garages-far", !close);
+        const central = parkingShapes["cp-central"];
+        if (central && central.getTooltip()) central.setTooltipContent(close ? "College Park Central" : "College Park garages");
+    }
+    if (map) map.on("zoomend", updateGarageLabels);
+    function renderParkingPanel() {
+        const n = (window.MP_PARKING_AREAS || []).length;
+        $("parking-count").textContent = `${n} UTA parking areas are shaded blue on the map. Darker blue with a label means a garage. Tap any area for details.`;
+        const list = $("garage-list");
+        list.innerHTML = "";
+        D.PARKING.forEach(g => {
+            const b = el("button", "garage-row"); b.type = "button";
+            const ic = el("span", "garage-icon"); ic.innerHTML = svg("parking");
+            const txt = el("span", "garage-text");
+            txt.append(el("strong", null, g.name), el("span", null, g.who));
+            b.append(ic, txt);
+            b.addEventListener("click", () => {
+                if (!map) return;
+                if (!map.hasLayer(layers.parking)) document.querySelector('.filter-chip[data-layer="parking"]').click();
+                document.querySelector(".main-content").scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+                const shape = parkingShapes[g.id];
+                if (shape) { map.flyToBounds(shape.getBounds(), { maxZoom: 18, duration: reduceMotion ? 0 : 0.8 }); setTimeout(() => shape.openPopup(), reduceMotion ? 0 : 850); }
+            });
+            list.appendChild(b);
+        });
+        const zones = $("zone-list");
+        zones.innerHTML = "";
+        D.PARKING_ZONES.forEach(z => {
+            const row = el("div", `zone-row zone-${z.id}`);
+            row.append(el("strong", null, z.name), el("span", null, z.places));
+            zones.appendChild(row);
+        });
+        $("parking-finder").href = D.LINKS.parkingFinder;
+        $("parking-fit").addEventListener("click", () => {
+            if (!map || !parkingBounds) return;
+            if (!map.hasLayer(layers.parking)) document.querySelector('.filter-chip[data-layer="parking"]').click();
+            document.querySelector(".main-content").scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+            map.flyToBounds(parkingBounds, { padding: [12, 12], duration: reduceMotion ? 0 : 0.8 });
         });
     }
     function drawShuttleLayer() {
@@ -420,19 +476,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     // ======================================================================
-    //  PARKING report
-    // ======================================================================
-    const lotSel = $("lot-select");
-    D.PARKING.forEach(l => { const o = el("option", null, l.name); o.value = l.id; lotSel.appendChild(o); });
-    document.querySelectorAll("[data-lot-status]").forEach(b => b.addEventListener("click", async () => {
-        const lot = D.PARKING.find(l => l.id === lotSel.value);
-        if (await submit({ type: "lot", targetId: lot.id, status: b.dataset.lotStatus, label: lot.name, lat: lot.lat, lng: lot.lng },
-            `${lot.name} marked ${b.dataset.lotStatus === "full" ? "full" : "open"}.`)) {
-            $("lot-msg").textContent = "Shown on the map's Parking layer for 90 minutes.";
-        }
-    }));
-
-    // ======================================================================
     //  STUDY SPOTS
     // ======================================================================
     function studyState(s) {
@@ -528,7 +571,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         75: ["Heavy snow", "❄️"], 80: ["Showers", "🌦️"], 81: ["Showers", "🌧️"], 82: ["Heavy showers", "⛈️"],
         95: ["Thunderstorms", "⛈️"], 96: ["Thunderstorms, hail", "⛈️"], 99: ["Thunderstorms, hail", "⛈️"]
     };
-    async function loadWeather() {
+    async function loadWeather(fromButton) {
+        const btn = $("weather-refresh");
+        if (btn.classList.contains("loading")) return;
+        btn.classList.add("loading"); btn.disabled = true; btn.setAttribute("aria-busy", "true");
+        const started = Date.now();
         const [lat, lng] = D.CAMPUS_CENTER;
         const p = new URLSearchParams({
             latitude: lat, longitude: lng, current: "temperature_2m,apparent_temperature,weather_code,wind_speed_10m",
@@ -546,13 +593,23 @@ document.addEventListener("DOMContentLoaded", async () => {
             $("current-temperature").textContent = Math.round(d.current.temperature_2m);
             $("current-condition").textContent = cond;
             $("weather-sub").textContent = `Feels ${Math.round(d.current.apparent_temperature)}° · H ${Math.round(d.daily.temperature_2m_max[0])}° L ${Math.round(d.daily.temperature_2m_min[0])}° · Wind ${Math.round(d.current.wind_speed_10m)} mph · Rain ${d.daily.precipitation_probability_max[0]}%`;
+            $("weather-updated").textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+            if (fromButton === true) {
+                const strip = $("weather-strip");
+                strip.classList.remove("refreshed"); void strip.offsetWidth; strip.classList.add("refreshed");
+                toast("Weather updated", "ok");
+            }
         } catch (e) {
             console.error("Weather unavailable", e);
             $("current-condition").textContent = "Weather unavailable right now";
+            if (fromButton === true) toast("Couldn't reach the weather service. Try again in a moment.", "warn");
+        } finally {
+            // keep the spinner up long enough to read as "it worked"
+            setTimeout(() => { btn.classList.remove("loading"); btn.disabled = false; btn.removeAttribute("aria-busy"); }, Math.max(0, 600 - (Date.now() - started)));
         }
         renderBrief();
     }
-    $("weather-refresh").addEventListener("click", loadWeather);
+    $("weather-refresh").addEventListener("click", () => loadWeather(true));
 
     const NWS = "https://api.weather.gov";
     async function loadNws() {
@@ -995,6 +1052,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // Static/first paint before the store connects.
     drawShuttleLayer();
+    drawParkingLayer();
+    updateGarageLabels();
+    renderParkingPanel();
     renderRoutes();
     renderNotifyMode();
     renderAll();

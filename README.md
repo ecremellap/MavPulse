@@ -24,7 +24,7 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 | Closures (kind + location from a picker, GPS, or map tap — no typing) | Crowd reports | Live, shared |
 | Weather alerts + alert areas on the map | National Weather Service API | Live |
 | Current weather for campus | Open-Meteo | Live |
-| Parking: real UTA garages and lots, "full / spaces open" reports, link to UTA Parking Finder | UTA PATS + crowd reports | Live, shared |
+| Parking: all 53 UTA parking areas highlighted on the map, garages labeled, student commuter zones, link to UTA Parking Finder for live counts | OpenStreetMap outlines + UTA PATS 2026–27 permit guide | Reference |
 | Study spots: busy / open status from student reports only (no estimate shown) | Crowd reports | Live, shared |
 | MavMover routes, stops, hours, "running now"; one tap to TripShot live bus tracking | UTA PATS schedule + TripShot link | Live |
 | Official city road work (barricaded right-of-way permits) on the map and Home | City of Arlington public GIS | Live, refreshed every 30 min |
@@ -47,18 +47,19 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 | `data.js` | Real reference data (crossings, lots, study spots, places, MavMover routes), all coordinates checked against OpenStreetMap |
 | `logic.js` | Every rule as a pure, tested function (confirmation, expiry, anti-spam, schedule, notifications, points, brief) |
 | `citydata.js` | Read-only queries to the City of Arlington's public ArcGIS server (road work, rail line, police calls, crime) |
+| `parking-areas.js` | Outlines of every parking area inside the UTA campus boundary (OpenStreetMap) |
 | `store.js` | `ReportStore` interface with two implementations: `FirebaseReportStore` (shared) and `LocalReportStore` (fallback). The UI only knows the interface. |
 | `script.js` | UI wiring for the five tabs, map layers and settings |
 | `firestore.rules` | Server-side security: report shape validation, only reporters/admins can delete, only admins post updates, nobody can make themselves admin |
 | `sw.js`, `manifest.webmanifest` | Installable PWA + offline app shell |
-| `tests.js`, `tests.html` | 61 automated tests |
+| `tests.js`, `tests.html` | 65 automated tests |
 
 ## Run and test
 
 No build step. Serve the folder with any static server, e.g. `python3 -m http.server`, then open `http://localhost:8000`.
 
 ```
-node tests.js        # 61 / 61 tests passed
+node tests.js        # 65 / 65 tests passed
 ```
 
 ## Shared backend setup (Firebase)

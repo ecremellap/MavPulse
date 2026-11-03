@@ -6,8 +6,7 @@
  *   - Rail crossings: OSM nodes tagged railway=level_crossing on the
  *     "UP Dallas Subdivision" (operator: Union Pacific Railroad).
  *   - Buildings / garages: OSM building and amenity=parking features.
- *   - Numbered student lots: UTA PATS "Parking Lot Addresses" page,
- *     geocoded with OSM Nominatim.
+ *   - Parking outlines: OSM amenity=parking inside the UTA campus area.
  * MavMover routes, stops and hours come from UTA PATS:
  *   https://www.uta.edu/pats/transportation/mav-mover-shuttles.php
  * Live bus locations are provided by TripShot (uta.tripshot.com); we link
@@ -28,19 +27,25 @@
         { id: "collins",  name: "Collins St",    lat: 32.73692, lng: -97.09733, detour: "Use the Cooper St crossing" }
     ];
 
-    // Parking: garages (OSM) + main commuter lots (PATS addresses).
+    // Parking. The outlines of all UTA parking areas live in parking-areas.js
+    // (OpenStreetMap). Garages below are the ones OSM names; who may park
+    // in each comes from UTA PATS "Where May I Park with my Permit" 2026-27.
     const PARKING = [
-        { id: "maverick-garage",  name: "Maverick Parking Garage", kind: "Garage · visitor & permit", lat: 32.72945, lng: -97.11172 },
-        { id: "west-garage",      name: "West Campus Garage",      kind: "Garage · student & visitor", lat: 32.73350, lng: -97.11691 },
-        { id: "cp-north",         name: "College Park North Garage", kind: "Garage · student", lat: 32.73315, lng: -97.10769 },
-        { id: "cp-central",       name: "College Park Central Garage", kind: "Garage · student & resident", lat: 32.73267, lng: -97.10783 },
-        { id: "cp-south",         name: "College Park South Garage", kind: "Garage · student & resident", lat: 32.73172, lng: -97.10781 },
-        { id: "lot-26",           name: "Lot 26 (Maverick Stadium)", kind: "Surface lot · student", lat: 32.72617, lng: -97.12569 },
-        { id: "lot-27",           name: "Lot 27 (Studio Arts)",    kind: "Surface lot · student", lat: 32.72923, lng: -97.12375 },
-        { id: "lot-49",           name: "Lot 49",                  kind: "Surface lot · student", lat: 32.72635, lng: -97.11454 },
-        { id: "lot-50",           name: "Lot 50",                  kind: "Surface lot · student", lat: 32.72497, lng: -97.11123 },
-        { id: "lot-52",           name: "Lot 52",                  kind: "Surface lot · student", lat: 32.72605, lng: -97.11103 },
-        { id: "lot-53",           name: "Lot 53",                  kind: "Surface lot · student", lat: 32.72620, lng: -97.10920 }
+        { id: "west-garage", osm: 286867628, name: "West Campus Garage", kind: "Garage", who: "Student Commuter West zone. Faculty/staff permits excluded.", lat: 32.73360, lng: -97.11704 },
+        { id: "maverick-garage", osm: 286852862, name: "Maverick Parking Garage", kind: "Garage", who: "Hourly visitor parking and Maverick Preferred permits.", lat: 32.72943, lng: -97.11163 },
+        { id: "cp-north", osm: 472239612, name: "College Park North (Park North)", kind: "Garage", who: "Commuter East zone (designated student spaces) and faculty/staff spaces.", lat: 32.73327, lng: -97.10768 },
+        { id: "cp-central", osm: 668767199, name: "College Park Central (Park Central)", kind: "Garage", who: "Commuter East zone (designated student spaces); Resident East on signed floors 2–5.", lat: 32.73265, lng: -97.10786 },
+        { id: "cp-south", osm: 1049104123, name: "College Park South (Park South)", kind: "Garage", who: "Commuter East zone (designated student spaces); Resident East on floors 4–5.", lat: 32.73171, lng: -97.10783 }
+    ];
+
+    // Student commuter zones, UTA PATS 2026-27. During peak weeks
+    // (Aug 17–Sep 30, Jan 12–Feb 15, weekdays 7 AM–1 PM) a student commuter
+    // parks in their zone; after 5 PM and on weekends most lots open up.
+    const PARKING_ZONES = [
+        { id: "west", name: "Commuter West", places: "West Campus Garage, Lots 30, 34, 35" },
+        { id: "east", name: "Commuter East", places: "College Park garages, Lot 36 (unreserved section)" },
+        { id: "south", name: "Commuter South", places: "Lots 45, 49, 50, 51, 52, 53" },
+        { id: "remote", name: "Remote Park & Ride", places: "Lots 25, 26, 27, with MavMover shuttles to campus" }
     ];
 
     // Study spaces: positions of the OSM building/library features.
@@ -122,7 +127,7 @@
         cityCrimeSearch: "https://crimesearch.arlingtontx.gov/"
     };
 
-    const DATA = { CAMPUS_CENTER, CROSSINGS, PARKING, STUDY_SPOTS, PLACES, CLOSURE_KINDS, ROUTES, LINKS };
+    const DATA = { CAMPUS_CENTER, CROSSINGS, PARKING, PARKING_ZONES, STUDY_SPOTS, PLACES, CLOSURE_KINDS, ROUTES, LINKS };
     root.MP_DATA = DATA;
     if (typeof module !== "undefined" && module.exports) module.exports = DATA;
 })(typeof window !== "undefined" ? window : globalThis);

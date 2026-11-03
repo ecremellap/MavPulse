@@ -104,6 +104,7 @@
                     <div class="weather-strip-main">
                         <div><strong id="current-temperature">--</strong>° <span id="current-condition">Loading weather</span></div>
                         <div class="weather-strip-sub" id="weather-sub">UTA campus · Open-Meteo</div>
+                        <div class="weather-strip-sub" id="weather-updated">UTA campus · Open-Meteo</div>
                     </div>
                     <button class="icon-btn light" id="weather-refresh" type="button" aria-label="Refresh weather"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg></button>
                 </div>
@@ -142,7 +143,7 @@
                 <button class="filter-chip active" type="button" data-layer="alerts" aria-pressed="true">Weather alerts</button>
                 <button class="filter-chip active" type="button" data-layer="roadwork" aria-pressed="true">City road work</button>
                 <button class="filter-chip" type="button" data-layer="safety" aria-pressed="false">Safety</button>
-                <button class="filter-chip" type="button" data-layer="parking" aria-pressed="false">Parking</button>
+                <button class="filter-chip active" type="button" data-layer="parking" aria-pressed="true">Parking</button>
                 <button class="filter-chip" type="button" data-layer="shuttles" aria-pressed="false">Shuttles</button>
                 <button class="filter-chip" type="button" data-layer="study" aria-pressed="false">Study</button>
             </div>
@@ -152,6 +153,21 @@
             </div>
             <div class="hazard-banner" id="hazard-banner" hidden></div>
             <div class="safety-card" id="safety-card" hidden></div>
+            <section class="parking-panel" id="parking-panel" aria-labelledby="parking-title">
+                <div class="parking-head">
+                    <h2 class="section-title" id="parking-title">UTA parking</h2>
+                    <button class="small-btn" id="parking-fit" type="button">Show all on map</button>
+                </div>
+                <p class="section-hint" id="parking-count">Every UTA parking area is shaded blue on the map. Garages are labeled.</p>
+                <div class="garage-list" id="garage-list"></div>
+                <h3 class="zone-title">Student commuter zones</h3>
+                <div class="zone-list" id="zone-list"></div>
+                <p class="source-note">Zones apply on peak weeks (Aug 17–Sep 30 and Jan 12–Feb 15), weekdays 7 AM–1 PM. After 5 PM and on weekends most lots are open to any valid permit. Always follow posted signs. Source: UTA Parking &amp; Transportation, 2026–27 permit guide; outlines © OpenStreetMap.</p>
+                <a class="parking-finder" id="parking-finder" target="_blank" rel="noopener">
+                    <span><strong>Live open spaces</strong><span>Official counts in UTA Parking Finder</span></span>
+                    <svg class="i" aria-hidden="true"><use href="#i-ext"/></svg>
+                </a>
+            </section>
             <div class="map-footer-text" id="map-footer-text">Tap a marker for detail.</div>
             <div class="map-legend">
                 <div><span class="legend-dot crossing-clear"></span> Crossing clear</div>
@@ -160,7 +176,7 @@
                 <div><span class="legend-swatch roadwork"></span> City road work</div>
                 <div><span class="legend-swatch rail"></span> UP rail line</div>
                 <div><span class="legend-dot me"></span> You</div>
-                <div><span class="legend-dot parking"></span> Parking</div>
+                <div><span class="legend-swatch parking-area"></span> UTA parking</div>
                 <div><span class="legend-dot shuttles"></span> Shuttle stop</div>
                 <div><span class="legend-dot study"></span> Study spot</div>
                 <div><span class="legend-swatch alert"></span> Weather alert area</div>
@@ -197,16 +213,6 @@
                     </div>
                     <button class="primary-btn" id="closure-submit" type="button">Post closure</button>
                     <div class="form-msg" id="closure-msg" aria-live="polite"></div>
-                </div>
-
-                <div class="report-block">
-                    <h3><svg class="i" aria-hidden="true"><use href="#i-parking"/></svg>Parking lot status</h3>
-                    <select id="lot-select" class="big-select" aria-label="Parking lot"></select>
-                    <div class="row-btns">
-                        <button class="pill-btn danger" type="button" data-lot-status="full">It's full</button>
-                        <button class="pill-btn ok" type="button" data-lot-status="spaces">Spaces open</button>
-                    </div>
-                    <div class="form-msg" id="lot-msg" aria-live="polite"></div>
                 </div>
 
                 <div class="points-card" id="points-card"></div>
@@ -319,6 +325,7 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="firebase-config.js"></script>
 <script src="data.js"></script>
+<script src="parking-areas.js"></script>
 <script src="logic.js"></script>
 <script src="store.js"></script>
 <script src="citydata.js"></script>
