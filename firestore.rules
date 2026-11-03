@@ -1,0 +1,51 @@
+rules_version = '2';
+// MavPulse Firestore security rules.
+// - Anyone can read reports and campus updates.
+// - Only signed-in users (anonymous accounts are created automatically)
+//   can create reports, only as themselves, only with the allowed shape.
+// - Nobody can edit a report; the reporter or an admin can delete it.
+// - Admins are users with a document at /admins/{uid}. Only the team can
+//   create those (Firebase console), so nobody can make themselves admin.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function validReport(d) {
+      return d.keys().hasOnly(['type','targetId','status','kind','label','lat','lng','reporterId','at'])
+        && d.type in ['crossing','closure','lot','study']
+        && d.targetId is string && d.targetId.size() <= 40
+        && d.status is string && d.status.size() <= 20
+        && d.label is string && d.label.size() <= 80
+        && d.lat is number && d.lng is number
+        && d.lat > 32.6 && d.lat < 32.9 && d.lng > -97.3 && d.lng < -96.9
+        && d.at is int
+        && d.at > request.time.toMillis() - 300000
+        && d.at < request.time.toMillis() + 300000;
+    }
+    match /reports/{id} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.reporterId == request.auth.uid
+        && validReport(request.resource.data);
+      allow update: if false;
+      allow delete: if isAdmin()
+        || (request.auth != null && resource.data.reporterId == request.auth.uid);
+    }
+    match /updates/{id} {
+      allow read: if true;
+      allow create: if isAdmin()
+        && request.resource.data.title is string && request.resource.data.title.size() <= 80
+        && request.resource.data.body is string && request.resource.data.body.size() <= 280
+        && request.resource.data.kind in ['update','mavalert']
+        && request.resource.data.keys().hasOnly(['title','body','at','author','kind']);
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+    match /admins/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+  }
+}

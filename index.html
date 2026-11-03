@@ -2,390 +2,277 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0f1920">
+    <meta name="description" content="MavPulse: live rail crossings, closures, weather alerts, parking and MavMover shuttles for the UTA community.">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MavPulse">
     <title>MavPulse — UTA Campus & Commute</title>
-    <!-- Leaflet (vendored locally, no CDN dependency) -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-    <!-- External stylesheet -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="phone-container">
+<div class="phone-screen">
 
-    <div class="phone-container">
-        <div class="phone-screen">
-            
-            <!-- Barra de estado superior -->
-            <div class="status-bar">
-                <span>6:42 AM</span>
-                <div class="battery-icon"><div class="battery-level"></div></div>
-            </div>
-
-            <!-- Contenedor dinámico de vistas -->
-            <div class="main-content">
-                
-                <!-- VISTA 1: ALERTS -->
-                <div id="view-alerts" class="app-view active">
-                    <div class="view-header">
-                        <div class="view-tagline">Live Now</div>
-                        <div class="view-title">Campus & commute</div>
-                    </div>
-                    <div class="view-body">
-                        <div class="orange-card" id="live-alert-card" data-alert-id="mitchell-center-crossing">
-                            <div class="card-badge"><span class="pulse-dot"></span> Crossing Blocked Now</div>
-                            <h3>W Mitchell St at S Center St</h3>
-                            <p>Freight train detected. Estimated clear in 1:14. Cooper St underpass is open.</p>
-                            <div class="card-actions">
-                                <button class="btn-dark" id="btn-detour">Show detour</button>
-                                <button class="btn-outline btn-dismiss-alert" type="button">Dismiss</button>
-                            </div>
-                        </div>
-
-                        <section class="nws-alerts" aria-labelledby="nws-alerts-title">
-                            <div class="section-divider" id="nws-alerts-title">Live weather alerts</div>
-                            <div class="nws-alert-status" id="nws-alert-status" aria-live="polite">Checking for live weather alerts…</div>
-                            <div id="nws-alert-list" class="nws-alert-list"></div>
-                        </section>
-
-                        <section class="reports-section" aria-labelledby="reports-title">
-                            <div class="reports-header">
-                                <div>
-                                    <div class="section-divider" id="reports-title">Community reports</div>
-                                    <div class="reports-subtitle">Closures and crossings reported by other commuters.</div>
-                                </div>
-                                <button class="report-toggle-btn" id="report-toggle-btn" type="button" aria-expanded="false">Report a closure</button>
-                            </div>
-                            <form class="report-form" id="report-form" hidden>
-                                <label class="report-field">
-                                    <span>Where?</span>
-                                    <input type="text" id="report-location" maxlength="80" placeholder="e.g. W Mitchell St at S Center St" autocomplete="off">
-                                </label>
-                                <label class="report-field">
-                                    <span>What's happening? (optional)</span>
-                                    <input type="text" id="report-note" maxlength="120" placeholder="e.g. Train blocking the crossing" autocomplete="off">
-                                </label>
-                                <div class="report-form-actions">
-                                    <button type="submit" class="report-submit-btn">Post report</button>
-                                    <span class="report-error" id="report-error" aria-live="polite"></span>
-                                </div>
-                            </form>
-                            <div id="report-list" class="report-list"></div>
-                            <div class="reports-note">Reports are saved on your device in this build. A shared feed across users is a planned backend step.</div>
-                        </section>
-
-                        <section class="dismissed-alerts" aria-labelledby="dismissed-alerts-title">
-                            <div class="dismissed-alerts-header">
-                                <div>
-                                    <div class="section-divider">Saved for later</div>
-                                    <h3 id="dismissed-alerts-title">Dismissed alerts</h3>
-                                </div>
-                                <span class="saved-count" id="saved-alert-count">0</span>
-                            </div>
-                            <div id="dismissed-alert-list" class="dismissed-alert-list">
-                                <p class="empty-alerts">Dismissed alerts will appear here.</p>
-                            </div>
-                        </section>
-
-                        <div class="toggle-row">
-                        <div class="toggle-copy">
-                            <div class="toggle-title">Notify me before I arrive</div>
-                            <div class="toggle-subtitle" id="notifySubtitle">Alerts 10 min out on your commute route</div>
-                            <div class="toggle-status" id="notifyStatus" aria-live="polite">Notifications are off</div>
-                        </div>
-                        <button class="toggle-switch" id="notifySwitch" type="button" role="switch" aria-checked="false" aria-label="Notify me before I arrive">
-                            <div class="toggle-handle"></div>
-                        </button>
-                        </div>
-
-                        <div class="section-divider">Today on Campus</div>
-
-                        <div class="weather-card">
-                            <div class="weather-meta"><span>Weather</span><span>7:40 AM</span></div>
-                            <h4>Heavy rain until noon</h4>
-                            <p>Standing water reported on W Nedderman Dr. Shuttles running on wet-weather headways.</p>
-                        </div>
-
-                        <div class="weather-card">
-                            <div class="weather-meta"><span>Campus update</span><span>8:05 AM</span></div>
-                            <h4>Engineering building entrance changed</h4>
-                            <p>Use the north entrance while the main walkway is being cleaned. The building remains open.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- VISTA 2: MAP -->
-                <div id="view-map" class="app-view">
-                    <div class="view-header">
-                        <div class="view-tagline">Live Conditions</div>
-                        <div class="view-title">Campus map</div>
-                    </div>
-                    <div class="filter-bar" aria-label="Map layers">
-                        <button class="filter-chip" type="button" data-layer="trains" aria-pressed="false">Trains</button>
-                        <button class="filter-chip" type="button" data-layer="parking" aria-pressed="false">Parking</button>
-                        <button class="filter-chip" type="button" data-layer="shuttles" aria-pressed="false">Shuttles</button>
-                        <button class="filter-chip active" type="button" data-layer="closures" aria-pressed="true">Closures</button>
-                    </div>
-                    <div class="map-canvas">
-                        <div id="leaflet-map"></div>
-                    </div>
-                    <div class="map-footer-text" id="map-footer-text">
-                        Tap a marker for detail. Toggle layers with the chips above.
-                    </div>
-                    <div class="map-detail-card" id="map-detail-card" aria-live="polite">
-                        <div class="map-detail-label">Selected location</div>
-                        <h3>Select a marker</h3>
-                        <p>Choose a colored dot to see live campus information.</p>
-                    </div>
-                    <div class="map-legend">
-                        <div><span class="legend-dot closures"></span> Closure</div>
-                        <div><span class="legend-dot trains"></span> Train crossing</div>
-                        <div><span class="legend-dot parking"></span> Parking</div>
-                        <div><span class="legend-dot shuttles"></span> Shuttle</div>
-                    </div>
-                </div>
-
-                <!-- VISTA 3: STUDY SPOTS -->
-                <div id="view-study" class="app-view">
-                    <div class="view-header">
-                        <div class="view-tagline">Open Seats</div>
-                        <div class="view-title">Study spots</div>
-                    </div>
-                    <div class="filter-bar study-filter-bar" aria-label="Study spot filters">
-                        <button class="filter-chip active" type="button" data-study-filter="all" aria-pressed="true">All</button>
-                        <button class="filter-chip" type="button" data-study-filter="quiet" aria-pressed="false">Quiet</button>
-                        <button class="filter-chip" type="button" data-study-filter="group" aria-pressed="false">Group</button>
-                        <button class="filter-chip" type="button" data-study-filter="open" aria-pressed="false">Open now</button>
-                    </div>
-                    <div class="study-intro">Busyness is estimated from typical weekday patterns. If someone reports a spot, that live status is shown instead.</div>
-                    <div class="view-body study-list" id="study-list">
-                        <div class="study-card" data-study-id="central-library" data-study-types="quiet" data-study-open="true" data-busyness="0.9">
-                            <div class="card-header-row">
-                                <div class="card-title-main">Central Library, 6th floor</div>
-                                <div class="card-time-badge">Open until 2 AM</div>
-                            </div>
-                            <div class="card-subtitle-specs">Quiet · Silent zone, 40 desks, outlets at every seat</div>
-                            <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
-                                <div class="progress-label green">Estimating…</div>
-                            </div>
-                            <div class="study-report-row">
-                                <span class="study-report-prompt">Seen it recently?</span>
-                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
-                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
-                            </div>
-                        </div>
-                        <div class="study-card" data-study-id="seir-rooms" data-study-types="group" data-study-open="true" data-busyness="1">
-                            <div class="card-header-row">
-                                <div class="card-title-main">SEIR collaboration rooms</div>
-                                <div class="card-time-badge">Open until 10 PM</div>
-                            </div>
-                            <div class="card-subtitle-specs">Group · Bookable 90 min, whiteboard, seats 6</div>
-                            <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
-                                <div class="progress-label green">Estimating…</div>
-                            </div>
-                            <div class="study-report-row">
-                                <span class="study-report-prompt">Seen it recently?</span>
-                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
-                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
-                            </div>
-                        </div>
-                        <div class="study-card" data-study-id="science-engineering-library" data-study-types="quiet" data-study-open="true" data-busyness="0.8">
-                            <div class="card-header-row">
-                                <div class="card-title-main">Science and Engineering Library</div>
-                                <div class="card-time-badge">Open until midnight</div>
-                            </div>
-                            <div class="card-subtitle-specs">Quiet · 24 desks, charging stations, window seats</div>
-                            <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
-                                <div class="progress-label green">Estimating…</div>
-                            </div>
-                            <div class="study-report-row">
-                                <span class="study-report-prompt">Seen it recently?</span>
-                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
-                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
-                            </div>
-                        </div>
-                        <div class="study-card" data-study-id="nedderman-hall" data-study-types="group" data-study-open="true" data-busyness="0.75">
-                            <div class="card-header-row">
-                                <div class="card-title-main">Nedderman Hall</div>
-                                <div class="card-time-badge">Open until 11 PM</div>
-                            </div>
-                            <div class="card-subtitle-specs">Group · 32 tables, whiteboards, outlets near every wall</div>
-                            <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
-                                <div class="progress-label green">Estimating…</div>
-                            </div>
-                            <div class="study-report-row">
-                                <span class="study-report-prompt">Seen it recently?</span>
-                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
-                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
-                            </div>
-                        </div>
-                        <div class="study-card" data-study-id="life-science" data-study-types="quiet" data-study-open="true" data-busyness="0.85">
-                            <div class="card-header-row">
-                                <div class="card-title-main">Life Science</div>
-                                <div class="card-time-badge">Open until 9 PM</div>
-                            </div>
-                            <div class="card-subtitle-specs">Quiet · 18 desks, natural light, charging lockers</div>
-                            <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
-                                <div class="progress-label green">Estimating…</div>
-                            </div>
-                            <div class="study-report-row">
-                                <span class="study-report-prompt">Seen it recently?</span>
-                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
-                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
-                            </div>
-                        </div>
-                        <div class="study-card" data-study-id="nedderman-basement-library" data-study-types="quiet" data-study-open="true" data-busyness="0.6">
-                            <div class="card-header-row">
-                                <div class="card-title-main">Basement Library of Nedderman Hall</div>
-                                <div class="card-time-badge">Open 24 hours</div>
-                            </div>
-                            <div class="card-subtitle-specs">Quiet · 56 desks, low-noise zone, outlets at every seat</div>
-                            <div class="progress-container">
-                                <div class="progress-bar-bg"><div class="progress-bar-fill green" style="width: 0%;"></div></div>
-                                <div class="progress-label green">Estimating…</div>
-                            </div>
-                            <div class="study-report-row">
-                                <span class="study-report-prompt">Seen it recently?</span>
-                                <button class="study-report-btn" type="button" data-report="busy">It's busy</button>
-                                <button class="study-report-btn" type="button" data-report="open">It's open</button>
-                            </div>
-                        </div>
-                        <p class="study-empty-state" id="study-empty-state" hidden>No study spots match these filters yet.</p>
-                    </div>
-                </div>
-
-                <!-- VISTA 4: WEATHER -->
-                <div id="view-weather" class="app-view">
-                    <div class="view-header">
-                        <div class="view-tagline">Live conditions</div>
-                        <div class="view-title">Local weather</div>
-                    </div>
-                    <div class="view-body weather-view">
-                        <div class="weather-location-card">
-                            <div class="weather-location-label">Your current location</div>
-                            <div class="weather-location" id="weather-location">Requesting location…</div>
-                            <div class="weather-updated" id="weather-updated">Weather data will appear here.</div>
-                        </div>
-                        <div class="current-weather-card" id="current-weather-card">
-                            <div class="weather-loading" id="weather-loading">Getting your location and live conditions…</div>
-                            <div class="current-weather-content" id="current-weather-content" hidden>
-                                <div class="current-weather-icon" id="current-weather-icon">☀️</div>
-                                <div>
-                                    <div class="current-temperature"><span id="current-temperature">--</span>°</div>
-                                    <div class="current-condition" id="current-condition">Loading conditions</div>
-                                </div>
-                            </div>
-                            <div class="weather-error" id="weather-error" hidden></div>
-                        </div>
-                        <div class="weather-metrics" id="weather-metrics" hidden>
-                            <div><span>Feels like</span><strong id="feels-like">--</strong></div>
-                            <div><span>Humidity</span><strong id="humidity">--</strong></div>
-                            <div><span>Wind</span><strong id="wind-speed">--</strong></div>
-                            <div><span>Rain</span><strong id="rain-amount">--</strong></div>
-                        </div>
-                        <div class="weather-forecast-card">
-                            <div class="weather-section-title">Today’s outlook</div>
-                            <div class="forecast-row">
-                                <div><span>High</span><strong id="forecast-high">--</strong></div>
-                                <div><span>Low</span><strong id="forecast-low">--</strong></div>
-                                <div><span>Rain chance</span><strong id="forecast-rain">--</strong></div>
-                            </div>
-                        </div>
-                        <button class="weather-refresh" id="weather-refresh" type="button">Refresh weather</button>
-                        <div class="weather-source">Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo</a>.</div>
-                    </div>
-                </div>
-
-                <!-- VISTA 5: TRANSIT -->
-                <div id="view-transit" class="app-view">
-                    <div class="view-header">
-                        <div class="view-tagline">Next Arrivals</div>
-                        <div class="view-title">Campus shuttles</div>
-                    </div>
-                    <div class="filter-bar transit-filter-bar" aria-label="Transit routes">
-                        <button class="filter-chip active" type="button" data-transit-filter="all" aria-pressed="true">All routes</button>
-                        <button class="filter-chip" type="button" data-transit-filter="campus" aria-pressed="false">Campus</button>
-                        <button class="filter-chip" type="button" data-transit-filter="parking" aria-pressed="false">Parking</button>
-                        <button class="filter-chip" type="button" data-transit-filter="evening" aria-pressed="false">Evening</button>
-                    </div>
-                    <div class="transit-toolbar">
-                        <span id="transit-updated">Live arrivals</span>
-                        <button id="transit-refresh" type="button">Refresh</button>
-                    </div>
-                    <div class="view-body transit-list" id="transit-list">
-                        <button class="transit-card" type="button" data-transit-type="parking" data-route-id="a" data-minutes="6">
-                            <div class="transit-left">
-                                <div class="transit-badge orange">A</div>
-                                <div><div class="transit-name">Commuter Express</div><div class="transit-route">Lot 49 ➔ Central Library</div></div>
-                            </div>
-                            <div class="transit-right"><div class="transit-time">6</div><div class="transit-min">Min</div><span class="transit-chevron">⌄</span></div>
-                            <div class="transit-details">Next stop: Central Library · 4 stops · Accessible shuttle</div>
-                        </button>
-                        <button class="transit-card" type="button" data-transit-type="campus" data-route-id="b" data-minutes="14">
-                            <div class="transit-left">
-                                <div class="transit-badge dark">B</div>
-                                <div><div class="transit-name">Campus Loop</div><div class="transit-route">Full loop, every 12 min</div></div>
-                            </div>
-                            <div class="transit-right"><div class="transit-time">14</div><div class="transit-min">Min</div><span class="transit-chevron">⌄</span></div>
-                            <div class="transit-details">Next stop: Engineering · 8 stops · Wet-weather headways active</div>
-                        </button>
-                        <button class="transit-card" type="button" data-transit-type="parking" data-route-id="c" data-minutes="9">
-                            <div class="transit-left">
-                                <div class="transit-badge dark">C</div>
-                                <div><div class="transit-name">Park & Ride</div><div class="transit-route">Pecan St Garage ➔ campus core</div></div>
-                            </div>
-                            <div class="transit-right"><div class="transit-time">9</div><div class="transit-min">Min</div><span class="transit-chevron">⌄</span></div>
-                            <div class="transit-details">Next stop: Student Commons · 5 stops · 18 seats available</div>
-                        </button>
-                        <button class="transit-card" type="button" data-transit-type="campus" data-route-id="d" data-minutes="17">
-                            <div class="transit-left">
-                                <div class="transit-badge orange">D</div>
-                                <div><div class="transit-name">West Campus Connector</div><div class="transit-route">West Street Lot ➔ Engineering</div></div>
-                            </div>
-                            <div class="transit-right"><div class="transit-time">17</div><div class="transit-min">Min</div><span class="transit-chevron">⌄</span></div>
-                            <div class="transit-details">Next stop: Life Science · 6 stops · Bike rack onboard</div>
-                        </button>
-                        <button class="transit-card" type="button" data-transit-type="evening" data-route-id="e" data-minutes="22">
-                            <div class="transit-left">
-                                <div class="transit-badge dark">E</div>
-                                <div><div class="transit-name">Evening Safety Route</div><div class="transit-route">Library ➔ residence halls</div></div>
-                            </div>
-                            <div class="transit-right"><div class="transit-time">22</div><div class="transit-min">Min</div><span class="transit-chevron">⌄</span></div>
-                            <div class="transit-details">Next stop: Arlington Hall · 7 stops · Safety escort available</div>
-                        </button>
-                        <p class="transit-empty" id="transit-empty" hidden>No routes match this filter.</p>
-                    </div>
-                </div>
-
-            </div> <!-- Fin main-content -->
-
-            <nav class="tab-bar" aria-label="Campus sections">
-                <button class="tab-item active" data-view="alerts" aria-label="Alerts" aria-current="page">
-                    <span class="tab-icon">🚨</span><span class="tab-label">Alerts</span>
-                </button>
-                <button class="tab-item" data-view="map" aria-label="Map">
-                    <span class="tab-icon">🗺️</span><span class="tab-label">Map</span>
-                </button>
-                <button class="tab-item" data-view="study" aria-label="Study">
-                    <span class="tab-icon">📚</span><span class="tab-label">Study</span>
-                </button>
-                <button class="tab-item" data-view="weather" aria-label="Weather">
-                    <span class="tab-icon">☀️</span><span class="tab-label">Weather</span>
-                </button>
-                <button class="tab-item" data-view="transit" aria-label="Transit">
-                    <span class="tab-icon">🚌</span><span class="tab-label">Transit</span>
-                </button>
-            </nav>
-
+    <header class="app-bar">
+        <div class="app-brand"><span class="brand-dot"></span>MavPulse</div>
+        <div class="app-bar-right">
+            <span class="sync-pill" id="sync-pill" title="Data mode">Connecting…</span>
+            <button class="icon-btn" id="open-profile" type="button" aria-label="Profile and settings">👤</button>
         </div>
-    </div>
+    </header>
 
-    <!-- Leaflet library (vendored locally) -->
-    <script src="vendor/leaflet/leaflet.js"></script>
-    <!-- External JavaScript -->
-    <script src="script.js"></script>
+    <main class="main-content">
+
+        <!-- ============ HOME ============ -->
+        <section id="view-home" class="app-view active" aria-label="Home">
+            <div class="view-header">
+                <div class="view-tagline" id="home-date">Today</div>
+                <div class="view-title">Your commute brief</div>
+            </div>
+            <div class="view-body">
+                <div class="brief-card" id="brief-card" data-level="good">
+                    <div class="brief-headline" id="brief-headline">Loading live conditions…</div>
+                    <ul class="brief-lines" id="brief-lines"></ul>
+                </div>
+
+                <div id="mavalert-list"></div>
+                <div id="crossing-alerts"></div>
+
+                <div class="section-divider">Rail crossings near campus</div>
+                <p class="section-hint">Stuck at a train? Tap once. Two people reporting confirms it for everyone.</p>
+                <div class="crossing-list" id="crossing-list"></div>
+
+                <div class="section-divider">Live weather alerts · NWS</div>
+                <div class="nws-alert-status" id="nws-alert-status" aria-live="polite">Checking the National Weather Service…</div>
+                <div id="nws-alert-list" class="nws-alert-list"></div>
+
+                <div class="weather-strip" id="weather-strip">
+                    <div class="weather-strip-icon" id="current-weather-icon">⛅</div>
+                    <div class="weather-strip-main">
+                        <div><strong id="current-temperature">--</strong>° <span id="current-condition">Loading weather</span></div>
+                        <div class="weather-strip-sub" id="weather-sub">UTA campus · Open-Meteo</div>
+                    </div>
+                    <button class="small-btn" id="weather-refresh" type="button">Refresh</button>
+                </div>
+
+                <div class="section-divider">Closures reported by commuters</div>
+                <div id="closure-list" class="report-list"></div>
+
+                <div class="section-divider">Official city road work · City of Arlington</div>
+                <p class="section-hint">Right-of-way permits with barricades up right now, from the City's public GIS data.</p>
+                <div id="roadwork-list" class="report-list"><p class="empty-alerts">Loading city data…</p></div>
+
+                <div class="section-divider">Campus updates from MavPulse admins</div>
+                <div id="update-list" class="report-list"></div>
+
+                <div class="emergency-card">
+                    <div class="emergency-title">UTA emergency alerts</div>
+                    <p>Official MavAlerts go out by text and email. Verified MavPulse admins relay them here, but sign up so you never miss one.</p>
+                    <div class="row-btns">
+                        <a class="pill-btn" id="link-mavalert" target="_blank" rel="noopener">Sign up for MavAlert ↗</a>
+                        <a class="pill-btn" id="link-emergency" target="_blank" rel="noopener">UTA emergency info ↗</a>
+                        <a class="pill-btn" id="link-hotline">Call emergency info line</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============ MAP ============ -->
+        <section id="view-map" class="app-view" aria-label="Map">
+            <div class="view-header">
+                <div class="view-tagline">Live conditions</div>
+                <div class="view-title">Campus map</div>
+            </div>
+            <div class="filter-bar" aria-label="Map layers">
+                <button class="filter-chip active" type="button" data-layer="crossings" aria-pressed="true">Crossings</button>
+                <button class="filter-chip active" type="button" data-layer="closures" aria-pressed="true">Closures</button>
+                <button class="filter-chip active" type="button" data-layer="alerts" aria-pressed="true">Weather alerts</button>
+                <button class="filter-chip active" type="button" data-layer="roadwork" aria-pressed="true">City road work</button>
+                <button class="filter-chip" type="button" data-layer="safety" aria-pressed="false">Safety</button>
+                <button class="filter-chip" type="button" data-layer="parking" aria-pressed="false">Parking</button>
+                <button class="filter-chip" type="button" data-layer="shuttles" aria-pressed="false">Shuttles</button>
+                <button class="filter-chip" type="button" data-layer="study" aria-pressed="false">Study</button>
+            </div>
+            <div class="map-canvas">
+                <div id="leaflet-map"></div>
+                <button class="locate-btn" id="locate-btn" type="button" aria-pressed="false">📍 Locate me</button>
+            </div>
+            <div class="hazard-banner" id="hazard-banner" hidden></div>
+            <div class="safety-card" id="safety-card" hidden></div>
+            <div class="map-footer-text" id="map-footer-text">Tap a marker for detail.</div>
+            <div class="map-legend">
+                <div><span class="legend-dot crossing-clear"></span> Crossing clear</div>
+                <div><span class="legend-dot crossing-blocked"></span> Crossing blocked</div>
+                <div><span class="legend-dot closures"></span> Closure (commuter)</div>
+                <div><span class="legend-swatch roadwork"></span> City road work</div>
+                <div><span class="legend-swatch rail"></span> UP rail line</div>
+                <div><span class="legend-dot me"></span> You</div>
+                <div><span class="legend-dot parking"></span> Parking</div>
+                <div><span class="legend-dot shuttles"></span> Shuttle stop</div>
+                <div><span class="legend-dot study"></span> Study spot</div>
+                <div><span class="legend-swatch alert"></span> Weather alert area</div>
+            </div>
+        </section>
+
+        <!-- ============ REPORT (contribute) ============ -->
+        <section id="view-report" class="app-view" aria-label="Report">
+            <div class="view-header">
+                <div class="view-tagline">Help other Mavs</div>
+                <div class="view-title">Report in one tap</div>
+            </div>
+            <div class="view-body">
+                <div class="safety-note">🚗 Driving? Pull over or let a passenger tap. Nothing here needs typing.</div>
+
+                <div class="report-block">
+                    <h3>🚂 Train blocking a crossing</h3>
+                    <p class="section-hint">Tap the crossing you're stopped at.</p>
+                    <div class="big-btn-grid" id="report-crossing-grid"></div>
+                    <button class="text-btn" id="report-crossing-near" type="button">📍 Use my location to pick the nearest crossing</button>
+                </div>
+
+                <div class="report-block">
+                    <h3>🚧 Closure or road issue</h3>
+                    <p class="section-hint">1. What is it?</p>
+                    <div class="chip-grid" id="closure-kind-grid" role="radiogroup" aria-label="Kind of issue"></div>
+                    <p class="section-hint">2. Where?</p>
+                    <select id="closure-place" class="big-select" aria-label="Location">
+                        <option value="">Choose a location…</option>
+                    </select>
+                    <div class="row-btns">
+                        <button class="text-btn" id="closure-use-gps" type="button">📍 Use my location</button>
+                        <button class="text-btn" id="closure-pick-map" type="button">🗺️ Pick on map</button>
+                    </div>
+                    <button class="primary-btn" id="closure-submit" type="button">Post closure</button>
+                    <div class="form-msg" id="closure-msg" aria-live="polite"></div>
+                </div>
+
+                <div class="report-block">
+                    <h3>🅿️ Parking lot status</h3>
+                    <select id="lot-select" class="big-select" aria-label="Parking lot"></select>
+                    <div class="row-btns">
+                        <button class="pill-btn danger" type="button" data-lot-status="full">It's full</button>
+                        <button class="pill-btn ok" type="button" data-lot-status="spaces">Spaces open</button>
+                    </div>
+                    <div class="form-msg" id="lot-msg" aria-live="polite"></div>
+                </div>
+
+                <div class="points-card" id="points-card"></div>
+            </div>
+        </section>
+
+        <!-- ============ STUDY ============ -->
+        <section id="view-study" class="app-view" aria-label="Study spots">
+            <div class="view-header">
+                <div class="view-tagline">Find a seat</div>
+                <div class="view-title">Study spots</div>
+            </div>
+            <div class="filter-bar study-filter-bar" aria-label="Study spot filters">
+                <button class="filter-chip active" type="button" data-study-filter="all" aria-pressed="true">All</button>
+                <button class="filter-chip" type="button" data-study-filter="open" aria-pressed="false">Reported open</button>
+            </div>
+            <div class="study-intro">There is no public seat-count feed for UTA study spaces, so MavPulse only shows what students report. Reports count for 60 minutes and earn you points.</div>
+            <div class="view-body study-list" id="study-list"></div>
+        </section>
+
+        <!-- ============ SHUTTLES ============ -->
+        <section id="view-transit" class="app-view" aria-label="Shuttles">
+            <div class="view-header">
+                <div class="view-tagline">MavMover</div>
+                <div class="view-title">Campus shuttles</div>
+            </div>
+            <div class="view-body">
+                <a class="tripshot-card" id="tripshot-link" target="_blank" rel="noopener">
+                    <div>
+                        <strong>See live bus locations</strong>
+                        <span>Opens UTA's official TripShot tracker</span>
+                    </div>
+                    <span aria-hidden="true">↗</span>
+                </a>
+                <div class="transit-toolbar"><span id="transit-updated">Schedule</span></div>
+                <div class="route-list" id="route-list"></div>
+                <p class="source-note">Routes, stops and hours from UTA Parking &amp; Transportation (school-year, Mon–Fri). Live vehicle positions are TripShot's; MavPulse links to them rather than copying them.</p>
+            </div>
+        </section>
+    </main>
+
+    <nav class="tab-bar" aria-label="Sections">
+        <button class="tab-item active" data-view="home" aria-current="page"><span class="tab-icon">🏠</span><span class="tab-label">Home</span></button>
+        <button class="tab-item" data-view="map"><span class="tab-icon">🗺️</span><span class="tab-label">Map</span></button>
+        <button class="tab-item tab-report" data-view="report"><span class="tab-icon">＋</span><span class="tab-label">Report</span></button>
+        <button class="tab-item" data-view="study"><span class="tab-icon">📚</span><span class="tab-label">Study</span></button>
+        <button class="tab-item" data-view="transit"><span class="tab-icon">🚌</span><span class="tab-label">Shuttles</span></button>
+    </nav>
+
+    <!-- ============ PROFILE / SETTINGS SHEET ============ -->
+    <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+    <aside class="sheet" id="profile-sheet" hidden aria-label="Profile and settings">
+        <div class="sheet-head">
+            <h2>Profile &amp; settings</h2>
+            <button class="icon-btn dark" id="close-profile" type="button" aria-label="Close">✕</button>
+        </div>
+        <div class="sheet-body">
+            <div class="points-card" id="profile-points"></div>
+
+            <h3>Notifications</h3>
+            <div class="seg" role="radiogroup" aria-label="Notification mode" id="notify-mode">
+                <button type="button" data-mode="commuter">Commuter</button>
+                <button type="button" data-mode="quiet">Quiet</button>
+                <button type="button" data-mode="off">Off</button>
+            </div>
+            <p class="section-hint" id="notify-help"></p>
+
+            <h3>Install on your phone</h3>
+            <p class="section-hint">iPhone: Safari → Share → <b>Add to Home Screen</b>. Android: Chrome → ⋮ → <b>Install app</b>. No app store needed.</p>
+            <button class="small-btn" id="install-btn" type="button" hidden>Install MavPulse</button>
+
+            <h3>Test mode</h3>
+            <p class="section-hint">Simulates a train at a crossing (two fake reporters) so the 30-second alert requirement can be tested without a real train. Simulated reports stay on this device only.</p>
+            <select id="sim-crossing" class="big-select" aria-label="Crossing to simulate"></select>
+            <button class="small-btn" id="sim-train" type="button">Simulate a train</button>
+            <div class="form-msg" id="sim-msg" aria-live="polite"></div>
+
+            <h3>Admins</h3>
+            <div id="admin-area">
+                <p class="section-hint">Admins post official campus updates and remove bad reports. We recruit them from UTA commuter groups and ACM; the team adds each one by hand.</p>
+                <form id="admin-form" class="admin-form" autocomplete="on">
+                    <input type="email" id="admin-email" placeholder="Admin email" autocomplete="username" required>
+                    <input type="password" id="admin-pass" placeholder="Password" autocomplete="current-password" required>
+                    <button class="small-btn" type="submit">Admin sign in</button>
+                </form>
+                <a class="text-btn" id="admin-volunteer" href="#">Want to be an admin? Email the team</a>
+            </div>
+            <div id="admin-panel" hidden>
+                <p class="section-hint">Signed in as admin: <b id="admin-who"></b></p>
+                <form id="update-form" class="admin-form">
+                    <input type="text" id="update-title" maxlength="80" placeholder="Update title" required>
+                    <textarea id="update-body" maxlength="280" rows="3" placeholder="Message (max 280 characters)" required></textarea>
+                    <label class="check-row"><input type="checkbox" id="update-mavalert"> This relays an official UTA MavAlert</label>
+                    <button class="small-btn" type="submit">Post campus update</button>
+                </form>
+                <button class="text-btn" id="admin-signout" type="button">Sign out</button>
+            </div>
+            <div class="form-msg" id="admin-msg" aria-live="polite"></div>
+
+            <p class="source-note" id="about-note"></p>
+        </div>
+    </aside>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</div>
+</div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="firebase-config.js"></script>
+<script src="data.js"></script>
+<script src="logic.js"></script>
+<script src="store.js"></script>
+<script src="citydata.js"></script>
+<script src="script.js"></script>
 </body>
 </html>

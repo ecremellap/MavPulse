@@ -20,14 +20,17 @@
     <div id="test-summary">Running tests…</div>
     <ul id="test-output"></ul>
     <p class="note">
-        These tests exercise the app's core logic: the UC-01 train-crossing
-        confirmation rule, the study-seat occupancy calculation, and the
-        National Weather Service alert filtering. They can also be run from a
-        terminal with <code>node tests.js</code>.
+        These tests exercise every rule MavPulse decides with: UC-01 crossing
+        confirmation and expiry, closure reports, anti-spam cooldown, study and
+        parking status, the MavMover schedule, NWS alert filtering, notification
+        modes, contributor points, the morning brief, real map coordinates, and
+        the on-device report store. Run from a terminal with <code>node tests.js</code>.
     </p>
 
-    <!-- Load the app logic (attaches the tested helpers to window), then the tests. -->
-    <script src="script.js"></script>
+    <!-- Load the data, rules and store under test, then the tests. -->
+    <script src="data.js"></script>
+    <script src="logic.js"></script>
+    <script src="store.js"></script>
     <script src="tests.js"></script>
 </body>
 </html>

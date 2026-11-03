@@ -1,919 +1,910 @@
-document.addEventListener("DOMContentLoaded", () => {
-    const DISMISSED_ALERTS_KEY = "campus-app-dismissed-alerts";
-    const tabs = document.querySelectorAll(".tab-item");
-    const views = document.querySelectorAll(".app-view");
-    const mainContent = document.querySelector(".main-content");
-    const dismissedAlertList = document.getElementById("dismissed-alert-list");
-    const savedAlertCount = document.getElementById("saved-alert-count");
-    const mapFooterText = document.getElementById("map-footer-text");
-    const mapDetailCard = document.getElementById("map-detail-card");
-    const weatherRefresh = document.getElementById("weather-refresh");
-    const transitCards = document.querySelectorAll(".transit-card[data-route-id]");
-    const transitFilters = document.querySelectorAll("[data-transit-filter]");
-    const transitRefresh = document.getElementById("transit-refresh");
-    const transitUpdated = document.getElementById("transit-updated");
-    const transitEmpty = document.getElementById("transit-empty");
-    let lastWeatherCoordinates = null;
-
-    function loadDismissedAlerts() {
-        try {
-            const savedAlerts = localStorage.getItem(DISMISSED_ALERTS_KEY);
-            if (!savedAlerts) return [];
-
-            const alerts = JSON.parse(savedAlerts);
-            return Array.isArray(alerts) ? alerts : [];
-        } catch (error) {
-            console.error("Unable to load dismissed campus alerts.", error);
-            return [];
-        }
-    }
-
-    function saveDismissedAlerts(alerts) {
-        try {
-            localStorage.setItem(DISMISSED_ALERTS_KEY, JSON.stringify(alerts));
-        } catch (error) {
-            console.error("Unable to save dismissed campus alerts.", error);
-        }
-    }
-
-    function renderDismissedAlerts() {
-        // Guard: if the Alerts-tab elements are not on the page (e.g. the
-        // test harness loads this script without the full app markup), skip.
-        if (!savedAlertCount || !dismissedAlertList) return;
-        const alerts = loadDismissedAlerts();
-        savedAlertCount.textContent = alerts.length;
-
-        if (!alerts.length) {
-            dismissedAlertList.innerHTML = '<p class="empty-alerts">Dismissed alerts will appear here.</p>';
-            return;
-        }
-
-        dismissedAlertList.innerHTML = "";
-        alerts.forEach(alert => {
-            const item = document.createElement("article");
-            item.className = "saved-alert";
-            item.dataset.alertId = alert.id;
-
-            const content = document.createElement("div");
-            content.className = "saved-alert-content";
-
-            const title = document.createElement("div");
-            title.className = "saved-alert-title";
-            title.textContent = alert.title;
-
-            const meta = document.createElement("div");
-            meta.className = "saved-alert-meta";
-            meta.textContent = `Dismissed ${new Date(alert.dismissedAt).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}`;
-
-            const restoreButton = document.createElement("button");
-            restoreButton.className = "restore-alert";
-            restoreButton.type = "button";
-            restoreButton.dataset.restoreAlert = alert.id;
-            restoreButton.textContent = "Restore";
-
-            content.append(title, meta);
-            item.append(content, restoreButton);
-            dismissedAlertList.appendChild(item);
-        });
-    }
-
-    function restoreAlert(alert) {
-        const card = document.createElement("div");
-        card.className = "orange-card";
-        card.id = "live-alert-card";
-        card.dataset.alertId = alert.id;
-        card.innerHTML = `
-            <div class="card-badge"><span class="pulse-dot"></span> ${alert.badge}</div>
-            <h3></h3>
-            <p></p>
-            <div class="card-actions">
-                <button class="btn-dark" id="btn-detour">Show detour</button>
-                <button class="btn-outline btn-dismiss-alert" type="button">Dismiss</button>
-            </div>
-        `;
-        card.querySelector("h3").textContent = alert.title;
-        card.querySelector("p").textContent = alert.description;
-        dismissedAlertList.closest(".dismissed-alerts").before(card);
-    }
-
-    function dismissAlert() {
-        const liveAlertCard = document.getElementById("live-alert-card");
-        if (!liveAlertCard) return;
-        const scrollPosition = mainContent ? mainContent.scrollTop : 0;
-
-        const alert = {
-            id: liveAlertCard.dataset.alertId,
-            badge: liveAlertCard.querySelector(".card-badge").textContent.trim(),
-            title: liveAlertCard.querySelector("h3").textContent,
-            description: liveAlertCard.querySelector("p").textContent,
-            dismissedAt: new Date().toISOString()
-        };
-        const alerts = loadDismissedAlerts().filter(savedAlert => savedAlert.id !== alert.id);
-        alerts.unshift(alert);
-        saveDismissedAlerts(alerts);
-
-        liveAlertCard.classList.add("is-dismissing");
-        window.setTimeout(() => {
-            liveAlertCard.remove();
-            renderDismissedAlerts();
-            // Restore scroll position after the dismissed card is removed.
-            if (mainContent) {
-                mainContent.style.overflowY = "auto";
-                mainContent.scrollTop = scrollPosition;
-            }
-        }, 300);
-    }
-
-    renderDismissedAlerts();
-
-    let transitFilter = "all";
-    function applyTransitFilter() {
-        let visibleCount = 0;
-        transitCards.forEach(card => {
-            const visible = transitFilter === "all" || card.dataset.transitType === transitFilter;
-            card.classList.toggle("filter-hidden", !visible);
-            if (visible) visibleCount += 1;
-        });
-        transitEmpty.hidden = visibleCount > 0;
-        transitUpdated.textContent = `Live arrivals · ${visibleCount} routes shown`;
-    }
-
-    transitFilters.forEach(filterButton => {
-        filterButton.addEventListener("click", () => {
-            transitFilter = filterButton.dataset.transitFilter;
-            transitFilters.forEach(button => {
-                const active = button === filterButton;
-                button.classList.toggle("active", active);
-                button.setAttribute("aria-pressed", String(active));
-            });
-            applyTransitFilter();
-        });
-    });
-
-    transitCards.forEach(card => {
-        card.addEventListener("click", () => card.classList.toggle("is-expanded"));
-    });
-
-    function refreshTransit() {
-        transitRefresh.disabled = true;
-        transitRefresh.textContent = "Updating…";
-        window.setTimeout(() => {
-            transitCards.forEach(card => {
-                const currentMinutes = Number(card.dataset.minutes);
-                const nextMinutes = Math.max(3, currentMinutes - 1 + Math.floor(Math.random() * 3));
-                card.dataset.minutes = String(nextMinutes);
-                card.querySelector(".transit-time").textContent = nextMinutes;
-            });
-            transitUpdated.textContent = `Updated just now · ${document.querySelectorAll(".transit-card:not(.filter-hidden)").length} routes shown`;
-            transitRefresh.disabled = false;
-            transitRefresh.textContent = "Refresh";
-        }, 500);
-    }
-
-    if (transitRefresh) {
-        transitRefresh.addEventListener("click", event => {
-            event.stopPropagation();
-            refreshTransit();
-        });
-    }
-    if (transitEmpty && transitUpdated) applyTransitFilter();
-
-    // ==================================================================
-    //  INTERACTIVE CAMPUS MAP (Leaflet + OpenStreetMap)
-    //  A real, pannable/zoomable map of the UTA campus area. Markers are
-    //  grouped into toggleable layers (trains, parking, shuttles, closures)
-    //  wired to the filter chips. Map tiles come from OpenStreetMap; Leaflet
-    //  is vendored locally in /vendor/leaflet so there is no CDN dependency.
-    //  Marker positions are campus-area coordinates for the prototype; the
-    //  closure, parking, shuttle, and train details are sample data until
-    //  those sources are wired up in a later iteration.
-    // ==================================================================
-    const mapEl = document.getElementById("leaflet-map");
-    if (mapEl && window.L) {
-        const UTA_CENTER = [32.7307, -97.1140];
-        const campusMap = L.map(mapEl, { zoomControl: true, scrollWheelZoom: true }).setView(UTA_CENTER, 15);
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            maxZoom: 19,
-            attribution: "&copy; OpenStreetMap contributors"
-        }).addTo(campusMap);
-
-        const LAYER_COLORS = { trains: "#b45309", parking: "#1f2937", shuttles: "#2563eb", closures: "#ea580c" };
-
-        // Campus-area points. Coordinates are approximate for the prototype.
-        const MAP_POINTS = [
-            { layer: "trains", title: "UP rail crossing – W Mitchell St", detail: "Union Pacific freight crossing. Sample data in this build.", lat: 32.7258, lng: 97.1136 * -1 },
-            { layer: "trains", title: "UP rail crossing – S Davis Dr", detail: "Freight crossing south of campus. Sample data in this build.", lat: 32.7261, lng: -97.1203 },
-            { layer: "parking", title: "Maverick Garage", detail: "Central-campus garage. Live counts are a planned source.", lat: 32.7325, lng: -97.1118 },
-            { layer: "parking", title: "Lot 49", detail: "Large commuter lot, about an 11 minute walk to the core. Live counts planned.", lat: 32.7250, lng: -97.1086 },
-            { layer: "shuttles", title: "Campus Loop – Central Library stop", detail: "Campus shuttle stop. Live arrivals are a planned source.", lat: 32.7299, lng: -97.1131 },
-            { layer: "shuttles", title: "Commuter stop – College Park", detail: "Commuter shuttle stop. Live arrivals planned.", lat: 32.7286, lng: -97.1095 },
-            { layer: "closures", title: "W Mitchell St crossing", detail: "Reported blockage point. Closures are crowd-reported in this build.", lat: 32.7258, lng: -97.1136 },
-            { layer: "closures", title: "Library walkway", detail: "Example maintenance closure. Crowd-reported in this build.", lat: 32.7302, lng: -97.1127 }
-        ];
-
-        function makeIcon(color) {
-            return L.divIcon({
-                className: "mp-map-marker",
-                html: `<span style="background:${color}"></span>`,
-                iconSize: [18, 18],
-                iconAnchor: [9, 9]
-            });
-        }
-
-        function showDetail(point) {
-            if (!mapDetailCard) return;
-            mapDetailCard.querySelector("h3").textContent = point.title;
-            mapDetailCard.querySelector("p").textContent = point.detail;
-        }
-
-        const layerGroups = {
-            trains: L.layerGroup(), parking: L.layerGroup(),
-            shuttles: L.layerGroup(), closures: L.layerGroup()
-        };
-        MAP_POINTS.forEach(point => {
-            const marker = L.marker([point.lat, point.lng], { icon: makeIcon(LAYER_COLORS[point.layer]) });
-            marker.bindPopup(`<strong>${point.title}</strong><br>${point.detail}`);
-            marker.on("click", () => showDetail(point));
-            marker.addTo(layerGroups[point.layer]);
-        });
-
-        function updateMapFooter() {
-            if (!mapFooterText) return;
-            let count = 0;
-            Object.keys(layerGroups).forEach(key => {
-                if (campusMap.hasLayer(layerGroups[key])) count += layerGroups[key].getLayers().length;
-            });
-            mapFooterText.textContent = `${count} marker${count === 1 ? "" : "s"} shown with your current layers. Tap a marker for detail.`;
-        }
-
-        function setLayer(layer, on) {
-            if (on) layerGroups[layer].addTo(campusMap);
-            else campusMap.removeLayer(layerGroups[layer]);
-            updateMapFooter();
-        }
-
-        const mapLayerButtons = document.querySelectorAll(".filter-chip[data-layer]");
-        mapLayerButtons.forEach(button => {
-            const layer = button.dataset.layer;
-            setLayer(layer, button.getAttribute("aria-pressed") === "true");
-            button.addEventListener("click", event => {
-                event.preventDefault();
-                const on = button.getAttribute("aria-pressed") !== "true";
-                button.classList.toggle("active", on);
-                button.setAttribute("aria-pressed", String(on));
-                setLayer(layer, on);
-            });
-        });
-
-        // Leaflet computes size on init; the map tab is hidden at startup, so
-        // recompute whenever the user opens it (via the tab or the detour button).
-        function refreshMapSize() { window.setTimeout(() => campusMap.invalidateSize(), 150); }
-        document.querySelectorAll('[data-view="map"], #btn-detour').forEach(el => {
-            el.addEventListener("click", refreshMapSize);
-        });
-    }
-
-    document.addEventListener("click", event => {
-        if (event.target.closest("#btn-detour")) {
-            switchView("map");
-            return;
-        }
-
-        const dismissButton = event.target.closest(".btn-dismiss-alert");
-        if (dismissButton) {
-            dismissAlert();
-            return;
-        }
-
-        const restoreButton = event.target.closest("[data-restore-alert]");
-        if (restoreButton) {
-            const alertId = restoreButton.dataset.restoreAlert;
-            const alerts = loadDismissedAlerts();
-            const alert = alerts.find(savedAlert => savedAlert.id === alertId);
-            if (!alert || document.getElementById("live-alert-card")) return;
-
-            saveDismissedAlerts(alerts.filter(savedAlert => savedAlert.id !== alertId));
-            restoreAlert(alert);
-            renderDismissedAlerts();
-        }
-    });
-
-
-    function switchView(viewId) {
-        views.forEach(view => view.classList.remove("active"));
-        
-        const targetView = document.getElementById(`view-${viewId}`);
-        if (targetView) {
-            targetView.classList.add("active");
-        }
-
-        tabs.forEach(tab => tab.classList.remove("active"));
-        tabs.forEach(tab => tab.removeAttribute("aria-current"));
-        
-        const targetTab = document.querySelector(`[data-view="${viewId}"]`);
-        if (targetTab) {
-            targetTab.classList.add("active");
-            targetTab.setAttribute("aria-current", "page");
-        }
-
-        if (mainContent) {
-            mainContent.scrollTop = 0;
-        }
-    }
-
-    tabs.forEach(tab => {
-        tab.addEventListener("click", () => {
-            const targetViewId = tab.getAttribute("data-view");
-            switchView(targetViewId);
-        });
-    });
-
-    const btnDetour = document.getElementById("btn-detour");
-    if (btnDetour) {
-        btnDetour.addEventListener("click", () => {
-            switchView("map");
-        });
-    }
-
-    const STUDY_REPORTS_KEY = "campus-app-study-reports";
-    const studyCards = document.querySelectorAll(".study-card[data-study-id]");
-    const studyFilters = document.querySelectorAll("[data-study-filter]");
-    const studyEmptyState = document.getElementById("study-empty-state");
-    const activeStudyFilters = new Set();
-
-    function applyStudyFilters() {
-        if (!studyEmptyState) return; // Study tab not on the page (e.g. test harness).
-        const categoryFilters = ["quiet", "group"].filter(filter => activeStudyFilters.has(filter));
-        const requiresOpenNow = activeStudyFilters.has("open");
-        let visibleCount = 0;
-
-        studyCards.forEach(card => {
-            const matchesType = categoryFilters.length === 0
-                || categoryFilters.some(filter => card.dataset.studyTypes.includes(filter));
-            const matchesOpen = !requiresOpenNow || card.dataset.studyOpen === "true";
-            const isVisible = matchesType && matchesOpen;
-
-            card.classList.toggle("filter-hidden", !isVisible);
-            if (isVisible) visibleCount += 1;
-        });
-
-        studyEmptyState.hidden = visibleCount > 0;
-        if (visibleCount === 0) {
-            const selectedLabels = [...activeStudyFilters]
-                .map(filter => document.querySelector(`[data-study-filter="${filter}"]`).textContent.trim());
-            studyEmptyState.textContent = `No spots match ${selectedLabels.join(" + ")} yet.`;
-        }
-    }
-
-    studyFilters.forEach(filterButton => {
-        filterButton.addEventListener("click", () => {
-            const filter = filterButton.dataset.studyFilter;
-            if (filter === "all") {
-                activeStudyFilters.clear();
-            } else if (activeStudyFilters.has(filter)) {
-                activeStudyFilters.delete(filter);
-            } else {
-                activeStudyFilters.add(filter);
-            }
-
-            const hasSpecificFilter = activeStudyFilters.size > 0;
-            studyFilters.forEach(button => {
-                const buttonFilter = button.dataset.studyFilter;
-                const isActive = buttonFilter === "all"
-                    ? !hasSpecificFilter
-                    : activeStudyFilters.has(buttonFilter);
-                button.classList.toggle("active", isActive);
-                button.setAttribute("aria-pressed", String(isActive));
-            });
-            applyStudyFilters();
-        });
-    });
-
-    applyStudyFilters();
-
-    // ------------------------------------------------------------------
-    //  Study-spot busyness = time-of-day ESTIMATE, overridden by a recent
-    //  crowd REPORT when one exists. There is no public live-seat feed for
-    //  campus study spaces, so we predict busyness from a typical weekday
-    //  pattern and let users crowd-report what they actually see, the same
-    //  way the app crowd-sources train crossings. Both the estimate and the
-    //  report-vs-estimate decision are pure functions, exposed for tests.
-    // ------------------------------------------------------------------
-    const LIVE_REPORT_WINDOW_MS = 60 * 60 * 1000; // a report counts as "live" for 60 minutes
-
-    // Typical weekday occupancy curve (0..1) by hour: quiet overnight,
-    // climbing through the morning to an early-afternoon peak, then easing off.
-    function typicalBusyness(hour) {
-        const curve = [
-            0.15, 0.10, 0.08, 0.05, 0.05, 0.08, 0.12, 0.20, 0.35, 0.50,
-            0.62, 0.72, 0.75, 0.82, 0.85, 0.80, 0.72, 0.60, 0.52, 0.50,
-            0.48, 0.42, 0.32, 0.22
-        ];
-        const h = ((Math.floor(hour) % 24) + 24) % 24;
-        return curve[h];
-    }
-
-    // Pure: estimated occupancy percent for a spot at a given hour.
-    // busynessFactor scales the shared curve so busier spaces read higher.
-    function estimateOccupancy(busynessFactor, hour) {
-        const pct = Math.round(typicalBusyness(hour) * Number(busynessFactor) * 100);
-        return Math.max(0, Math.min(100, pct));
-    }
-    window.estimateOccupancy = estimateOccupancy;
-
-    // Pure: decide what to show. A crowd report inside the live window wins
-    // over the estimate; otherwise fall back to the estimate.
-    function resolveStudyStatus(estimatePct, latestReport, now) {
-        if (latestReport && (now - new Date(latestReport.at).getTime()) <= LIVE_REPORT_WINDOW_MS) {
-            const pct = latestReport.status === "busy"
-                ? Math.max(estimatePct, 85)
-                : Math.min(estimatePct, 25);
-            return { source: "live", status: latestReport.status, pct };
-        }
-        return { source: "estimated", status: estimatePct >= 70 ? "busy" : "open", pct: estimatePct };
-    }
-    window.resolveStudyStatus = resolveStudyStatus;
-
-    function loadStudyReports() {
-        try {
-            const reports = JSON.parse(localStorage.getItem(STUDY_REPORTS_KEY) || "{}");
-            return reports && typeof reports === "object" ? reports : {};
-        } catch (error) {
-            console.error("Unable to load study reports.", error);
-            return {};
-        }
-    }
-
-    function saveStudyReports(reports) {
-        try {
-            localStorage.setItem(STUDY_REPORTS_KEY, JSON.stringify(reports));
-        } catch (error) {
-            console.error("Unable to save study reports.", error);
-        }
-    }
-
-    function minutesAgo(iso) {
-        const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-        if (mins <= 0) return "just now";
-        if (mins === 1) return "1 min ago";
-        return `${mins} min ago`;
-    }
-
-    function renderStudyCard(card) {
-        const fill = card.querySelector(".progress-bar-fill");
-        const label = card.querySelector(".progress-label");
-        if (!fill || !label) return;
-
-        const busyness = card.dataset.busyness || "0.7";
-        const estimatePct = estimateOccupancy(busyness, new Date().getHours());
-        const latestReport = loadStudyReports()[card.dataset.studyId] || null;
-        const state = resolveStudyStatus(estimatePct, latestReport, Date.now());
-
-        fill.style.width = `${state.pct}%`;
-        fill.classList.toggle("brown", state.pct >= 70);
-        fill.classList.toggle("green", state.pct < 70);
-        label.classList.toggle("brown", state.pct >= 70);
-        label.classList.toggle("green", state.pct < 70);
-
-        if (state.source === "live") {
-            const word = state.status === "busy" ? "Busy" : "Open";
-            label.textContent = `Live: ${word} · reported ${minutesAgo(latestReport.at)}`;
-        } else {
-            label.textContent = `Estimated ${state.pct}% full`;
-        }
-        card.classList.toggle("has-live-report", state.source === "live");
-    }
-
-    document.querySelectorAll(".study-card[data-study-id]").forEach(renderStudyCard);
-
-    document.addEventListener("click", event => {
-        const button = event.target.closest(".study-report-btn");
-        if (!button) return;
-        const card = button.closest(".study-card[data-study-id]");
-        if (!card) return;
-
-        const reports = loadStudyReports();
-        reports[card.dataset.studyId] = { status: button.dataset.report, at: new Date().toISOString() };
-        saveStudyReports(reports);
-        renderStudyCard(card);
-    });
-
-    const toggleSwitch = document.getElementById("notifySwitch");
-    if (toggleSwitch) {
-        const notifySubtitle = document.getElementById("notifySubtitle");
-        const notifyStatus = document.getElementById("notifyStatus");
-        const NOTIFY_PREFERENCE_KEY = "campus-app-notify-before-arrival";
-
-        function setNotificationPreference(isEnabled, showFeedback = false) {
-            toggleSwitch.classList.toggle("active", isEnabled);
-            toggleSwitch.dataset.state = isEnabled ? "on" : "off";
-            toggleSwitch.setAttribute("aria-checked", String(isEnabled));
-            notifySubtitle.textContent = isEnabled
-                ? "You'll get a reminder 10 min before your route."
-                : "Alerts 10 min out on your commute route";
-            notifyStatus.textContent = isEnabled
-                ? "Notifications are on"
-                : "Notifications are off";
-            notifyStatus.classList.toggle("visible", showFeedback || isEnabled);
-
-            try {
-                localStorage.setItem(NOTIFY_PREFERENCE_KEY, String(isEnabled));
-            } catch (error) {
-                console.error("Unable to save notification preference.", error);
-            }
-
-            if (showFeedback) {
-                window.clearTimeout(setNotificationPreference.feedbackTimeout);
-                setNotificationPreference.feedbackTimeout = window.setTimeout(() => {
-                    notifyStatus.classList.remove("visible");
-                }, 2600);
-            }
-        }
-
-        let savedPreference = false;
-        try {
-            savedPreference = localStorage.getItem(NOTIFY_PREFERENCE_KEY) === "true";
-        } catch (error) {
-            console.error("Unable to load notification preference.", error);
-        }
-        setNotificationPreference(savedPreference);
-
-        toggleSwitch.addEventListener("click", () => {
-            if (toggleSwitch.classList.contains("disabled")) return;
-            setNotificationPreference(toggleSwitch.dataset.state !== "on", true);
-            ejecutarAccionDeAlerta(toggleSwitch.dataset.state);
-        });
-    }
-
-        // Example handler for the notification toggle state.
-        function ejecutarAccionDeAlerta(estado) {
-            if (estado === "on") {
-                console.log("Alerts on: the user will be notified 10 min before their route.");
-                // This is where push notifications / geofencing would be activated.
-            } else {
-                console.log("Alerts off.");
-            }
-        }
-
-    // ======================================================================
-    //  LIVE WEATHER (Open-Meteo)
-    //  Pulls current conditions and today's forecast for the user's real
-    //  location. This block runs on page load so the Weather tab is live
-    //  immediately, independent of any other view.
-    // ======================================================================
-    const weatherCodeDescriptions = {
-        0: ["Clear sky", "☀️"], 1: ["Mainly clear", "🌤️"], 2: ["Partly cloudy", "⛅"],
-        3: ["Overcast", "☁️"], 45: ["Foggy", "🌫️"], 48: ["Rime fog", "🌫️"],
-        51: ["Light drizzle", "🌦️"], 53: ["Drizzle", "🌦️"], 55: ["Heavy drizzle", "🌧️"],
-        61: ["Light rain", "🌦️"], 63: ["Rain", "🌧️"], 65: ["Heavy rain", "🌧️"],
-        71: ["Light snow", "🌨️"], 73: ["Snow", "🌨️"], 75: ["Heavy snow", "❄️"],
-        80: ["Rain showers", "🌦️"], 81: ["Rain showers", "🌧️"], 82: ["Heavy showers", "⛈️"],
-        95: ["Thunderstorm", "⛈️"], 96: ["Thunderstorm with hail", "⛈️"], 99: ["Thunderstorm with hail", "⛈️"]
+/*
+ * MavPulse UI
+ * -----------
+ * Wires the screens to three things:
+ *   - MP_DATA   real reference data (data.js)
+ *   - MP        pure rules (logic.js), all unit-tested
+ *   - store     a ReportStore (store.js): shared Firebase backend, or
+ *               on-device fallback, behind the same interface
+ * Live public sources: Open-Meteo (weather), National Weather Service
+ * (alerts + alert areas), OpenStreetMap (map tiles).
+ */
+document.addEventListener("DOMContentLoaded", async () => {
+    "use strict";
+    const D = window.MP_DATA;
+    const MP = window.MP;
+    const $ = id => document.getElementById(id);
+    const MIN = 60 * 1000;
+
+    // ---------------- app state ----------------
+    const state = {
+        reports: [],          // from the store
+        simReports: [],       // test-mode only, never leave this device
+        updates: [],
+        weather: null,
+        nwsAlerts: [],
+        uid: null,
+        mode: "local",
+        pickedClosureKind: null,
+        pickedPlace: null,
+        notifyMode: loadPref("mavpulse-notify-mode", "commuter"),
+        notified: new Set(loadJSON("mavpulse-notified", []))
     };
+    // Placeholder until the real ReportStore connects (see bottom of file).
+    let store = { isAdmin: false, addReport: async () => { throw new Error("Still connecting"); }, removeReport: async () => {} };
+    const allReports = () => state.reports.concat(state.simReports);
+    const now = () => Date.now();
 
-    function setWeatherError(message) {
-        document.getElementById("weather-loading").hidden = true;
-        document.getElementById("current-weather-content").hidden = true;
-        const error = document.getElementById("weather-error");
-        error.textContent = message;
-        error.hidden = false;
+    function loadPref(k, dflt) { try { return localStorage.getItem(k) || dflt; } catch (e) { return dflt; } }
+    function savePref(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
+    function loadJSON(k, dflt) { try { return JSON.parse(localStorage.getItem(k)) || dflt; } catch (e) { return dflt; } }
+    function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+
+    let toastTimer = null;
+    function toast(msg) {
+        const t = $("toast");
+        t.textContent = msg; t.hidden = false;
+        clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
     }
 
-    // Fetch and render current conditions for the given coordinates.
-    async function loadWeather(coordinates) {
-        const weatherLocation = document.getElementById("weather-location");
-        const weatherUpdated = document.getElementById("weather-updated");
-        const weatherLoading = document.getElementById("weather-loading");
-        const weatherError = document.getElementById("weather-error");
-        if (!weatherRefresh) return;
-        weatherRefresh.disabled = true;
-        weatherRefresh.textContent = "Updating weather…";
-        weatherLoading.hidden = false;
-        weatherError.hidden = true;
+    // ---------------- navigation ----------------
+    const views = document.querySelectorAll(".app-view");
+    const tabs = document.querySelectorAll(".tab-item");
+    function switchView(id) {
+        views.forEach(v => v.classList.toggle("active", v.id === `view-${id}`));
+        tabs.forEach(t => {
+            const on = t.dataset.view === id;
+            t.classList.toggle("active", on);
+            if (on) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
+        });
+        document.querySelector(".main-content").scrollTop = 0;
+        if (id === "map" && map) setTimeout(() => map.invalidateSize(), 120);
+    }
+    tabs.forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
+    $("home-date").textContent = new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 
-        const params = new URLSearchParams({
-            latitude: coordinates.latitude.toString(),
-            longitude: coordinates.longitude.toString(),
-            current: "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m",
-            daily: "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
-            temperature_unit: "fahrenheit",
-            wind_speed_unit: "mph",
-            precipitation_unit: "inch",
-            forecast_days: "1",
-            timezone: "auto"
+    // ======================================================================
+    //  MAP
+    // ======================================================================
+    let map = null;
+    const layers = {};
+    if (window.L && $("leaflet-map")) {
+        map = L.map("leaflet-map", { zoomControl: true }).setView([32.7330, -97.1160], 15);
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+        }).addTo(map);
+        ["crossings", "closures", "alerts", "roadwork", "safety", "parking", "shuttles", "study", "rail", "me"].forEach(k => { layers[k] = L.layerGroup(); });
+        layers.rail.addTo(map);
+        layers.me.addTo(map);
+        document.querySelectorAll(".filter-chip[data-layer]").forEach(btn => {
+            const key = btn.dataset.layer;
+            if (btn.getAttribute("aria-pressed") === "true") layers[key].addTo(map);
+            btn.addEventListener("click", () => {
+                const on = btn.getAttribute("aria-pressed") !== "true";
+                btn.setAttribute("aria-pressed", String(on));
+                btn.classList.toggle("active", on);
+                if (on) layers[key].addTo(map); else map.removeLayer(layers[key]);
+                if (key === "safety") { $("safety-card").hidden = !on; if (on) loadSafety(); }
+                updateMapFooter();
+            });
+        });
+        map.on("click", e => {
+            if (!pickingOnMap) return;
+            pickingOnMap = false;
+            document.body.classList.remove("picking");
+            setPickedPlace({ id: "map-pick", name: `Pinned spot near ${nearestPlaceName(e.latlng.lat, e.latlng.lng)}`, lat: e.latlng.lat, lng: e.latlng.lng });
+            switchView("report");
+        });
+    }
+    function dot(cls, label) {
+        return L.divIcon({ className: "mp-marker", html: `<span class="mk ${cls}">${label || ""}</span>`, iconSize: [22, 22], iconAnchor: [11, 11] });
+    }
+    function updateMapFooter() {
+        if (!map) return;
+        let n = 0;
+        Object.keys(layers).forEach(k => { if (k !== "me" && k !== "rail" && map.hasLayer(layers[k])) n += layers[k].getLayers().length; });
+        $("map-footer-text").textContent = `${n} item${n === 1 ? "" : "s"} on the map. Tap any marker for detail.`;
+    }
+    function popupHTML(title, lines, extra) {
+        const div = el("div", "pop");
+        div.appendChild(el("strong", null, title));
+        (lines || []).forEach(l => div.appendChild(el("div", null, l)));
+        if (extra) div.appendChild(extra);
+        return div;
+    }
+
+    // Static layers: parking, shuttles, study markers
+    function drawParkingLayer() {
+        if (!map) return;
+        layers.parking.clearLayers();
+        D.PARKING.forEach(lot => {
+            const st = MP.latestStatus(allReports(), "lot", lot.id, now(), MP.RULES.LOT_TTL_MS);
+            const cls = st ? (st.status === "full" ? "lot-full" : "lot-open") : "parking";
+            const lines = [lot.kind, st ? `${st.status === "full" ? "Reported FULL" : "Reported spaces open"} · ${MP.minutesAgo(st.at, now())}` : "No recent report"];
+            const a = el("a", "pop-link", "Live counts: UTA Parking Finder ↗"); a.href = D.LINKS.parkingFinder; a.target = "_blank"; a.rel = "noopener";
+            L.marker([lot.lat, lot.lng], { icon: dot(cls, "P") }).bindPopup(popupHTML(lot.name, lines, a)).addTo(layers.parking);
+        });
+    }
+    function drawShuttleLayer() {
+        if (!map) return;
+        layers.shuttles.clearLayers();
+        const seen = new Map();
+        D.ROUTES.forEach(r => r.stops.forEach(s => {
+            const key = s.name;
+            if (!seen.has(key)) seen.set(key, { ...s, routes: [] });
+            seen.get(key).routes.push(r.name);
+        }));
+        seen.forEach(s => {
+            L.marker([s.lat, s.lng], { icon: dot("shuttles", "") })
+                .bindPopup(popupHTML(s.name, [`MavMover: ${s.routes.join(", ")}`, "Shown at the named building; exact stop may differ."])).addTo(layers.shuttles);
+        });
+    }
+    function drawStudyLayer() {
+        if (!map) return;
+        layers.study.clearLayers();
+        D.STUDY_SPOTS.forEach(s => {
+            const st = studyState(s);
+            L.marker([s.lat, s.lng], { icon: dot("study", "") })
+                .bindPopup(popupHTML(s.name, [studyLabel(s, st)])).addTo(layers.study);
+        });
+    }
+    function drawCrossingLayer() {
+        if (!map) return;
+        layers.crossings.clearLayers();
+        D.CROSSINGS.forEach(c => {
+            const s = MP.crossingState(allReports(), c.id, now());
+            const cls = s.state === "clear" ? "crossing-clear" : "crossing-blocked";
+            const lines = [s.state === "clear" ? "No train reported" : `${s.state === "confirmed" ? "Blocked, confirmed" : "Reported blocked"} · ${MP.minutesAgo(s.lastAt, now())}`];
+            if (s.state !== "clear") lines.push(`Detour: ${c.detour}`);
+            const m = L.marker([c.lat, c.lng], { icon: dot(cls, "🚂"), zIndexOffset: s.state === "clear" ? 0 : 1000 })
+                .bindPopup(popupHTML(`${c.name} rail crossing`, lines)).addTo(layers.crossings);
+            if (s.state !== "clear") m.bindTooltip(s.state === "confirmed" ? "BLOCKED" : "Reported", { permanent: true, direction: "top", className: "blocked-tip", offset: [0, -10] });
+        });
+    }
+    function drawClosureLayer(closures) {
+        if (!map) return;
+        layers.closures.clearLayers();
+        closures.forEach(c => {
+            const kind = (D.CLOSURE_KINDS.find(k => k.id === c.kind) || {}).label || "Closure";
+            L.marker([c.lat, c.lng], { icon: dot("closures", "!") })
+                .bindPopup(popupHTML(kind, [c.label, `${MP.minutesAgo(c.at, now())} · ${c.reporterCount} reporter${c.reporterCount === 1 ? "" : "s"}`]))
+                .addTo(layers.closures);
+        });
+    }
+
+    // ======================================================================
+    //  CROSSINGS (Home list + Report buttons + alerts)
+    // ======================================================================
+    function crossingStates() {
+        return D.CROSSINGS.map(c => ({ ...c, ...MP.crossingState(allReports(), c.id, now()) }));
+    }
+    function renderCrossings() {
+        const list = $("crossing-list");
+        list.innerHTML = "";
+        crossingStates().forEach(c => {
+            const row = el("div", `crossing-row ${c.state}`);
+            const left = el("div", "crossing-left");
+            left.appendChild(el("div", "crossing-name", c.name));
+            const sub = c.state === "clear" ? "Clear · no train reported"
+                : c.state === "confirmed" ? `Blocked · confirmed by ${c.reporters} people · ${MP.minutesAgo(c.lastAt, now())}`
+                : `Reported blocked by 1 person · ${MP.minutesAgo(c.lastAt, now())} · needs 1 more to confirm`;
+            left.appendChild(el("div", "crossing-sub", sub));
+            row.appendChild(left);
+            const btn = el("button", "pill-btn " + (c.state === "clear" ? "" : "ok"), c.state === "clear" ? "🚂 Train here" : "It's clear");
+            btn.type = "button";
+            btn.addEventListener("click", () => reportCrossing(c.id, c.state === "clear" ? "blocked" : "clear"));
+            row.appendChild(btn);
+            list.appendChild(row);
         });
 
-        try {
-            const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
-            if (!response.ok) throw new Error(`Weather service returned ${response.status}.`);
-            const data = await response.json();
-            const current = data.current;
-            const daily = data.daily;
-            const [condition, icon] = weatherCodeDescriptions[current.weather_code] || ["Current conditions", "🌡️"];
+        // Big alert cards for blocked crossings (replaces the old hardcoded card)
+        const alerts = $("crossing-alerts");
+        alerts.innerHTML = "";
+        crossingStates().filter(c => c.state !== "clear").forEach(c => {
+            const card = el("div", "orange-card" + (c.state === "reported" ? " unconfirmed" : ""));
+            const badge = el("div", "card-badge");
+            badge.innerHTML = '<span class="pulse-dot"></span>';
+            badge.append(c.state === "confirmed" ? " Crossing blocked now" : " Unconfirmed report");
+            card.appendChild(badge);
+            card.appendChild(el("h3", null, `${c.name} rail crossing`));
+            const sim = state.simReports.some(r => r.targetId === c.id) ? " (simulated)" : "";
+            card.appendChild(el("p", null, `${c.state === "confirmed" ? `Confirmed by ${c.reporters} commuters` : "One commuter reported a train"} · ${MP.minutesAgo(c.lastAt, now())}${sim}. ${c.detour}.`));
+            const actions = el("div", "card-actions");
+            const show = el("button", "btn-dark", "Show on map"); show.type = "button";
+            show.addEventListener("click", () => { switchView("map"); if (map) map.setView([c.lat, c.lng], 16); });
+            const same = el("button", "btn-outline", c.state === "confirmed" ? "It's clear now" : "I see it too"); same.type = "button";
+            same.addEventListener("click", () => reportCrossing(c.id, c.state === "confirmed" ? "clear" : "blocked"));
+            actions.append(show, same);
+            card.appendChild(actions);
+            alerts.appendChild(card);
+        });
 
-            weatherLocation.textContent = `${coordinates.latitude.toFixed(3)}°, ${coordinates.longitude.toFixed(3)}°`;
-            weatherUpdated.textContent = `Updated ${new Date(current.time).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · Live data`;
-            document.getElementById("current-weather-icon").textContent = icon;
-            document.getElementById("current-temperature").textContent = Math.round(current.temperature_2m);
-            document.getElementById("current-condition").textContent = condition;
-            document.getElementById("feels-like").textContent = `${Math.round(current.apparent_temperature)}°`;
-            document.getElementById("humidity").textContent = `${current.relative_humidity_2m}%`;
-            document.getElementById("wind-speed").textContent = `${Math.round(current.wind_speed_10m)} mph`;
-            document.getElementById("rain-amount").textContent = `${current.precipitation} in`;
-            document.getElementById("forecast-high").textContent = `${Math.round(daily.temperature_2m_max[0])}°`;
-            document.getElementById("forecast-low").textContent = `${Math.round(daily.temperature_2m_min[0])}°`;
-            document.getElementById("forecast-rain").textContent = `${daily.precipitation_probability_max[0]}%`;
-            weatherLoading.hidden = true;
-            document.getElementById("current-weather-content").hidden = false;
-            document.getElementById("weather-metrics").hidden = false;
-        } catch (error) {
-            console.error("Unable to load current weather.", error);
-            setWeatherError("Live weather is temporarily unavailable. Check your connection and try again.");
-        } finally {
-            weatherRefresh.disabled = false;
-            weatherRefresh.textContent = "Refresh weather";
-        }
+        // Report tab: one big button per crossing
+        const grid = $("report-crossing-grid");
+        grid.innerHTML = "";
+        crossingStates().forEach(c => {
+            const b = el("button", "big-btn " + (c.state === "clear" ? "" : "is-blocked"));
+            b.type = "button";
+            b.appendChild(el("span", "big-btn-title", c.name));
+            b.appendChild(el("span", "big-btn-sub", c.state === "clear" ? "Tap: train here" : "Tap: it's clear"));
+            b.addEventListener("click", () => reportCrossing(c.id, c.state === "clear" ? "blocked" : "clear"));
+            grid.appendChild(b);
+        });
     }
 
-    // Ask the browser for the user's location, then load weather for it.
-    function requestWeather() {
-        if (!navigator.geolocation) {
-            setWeatherError("Your browser does not support location services, so local weather cannot be loaded.");
-            return;
+    async function submit(report, okMsg) {
+        if (!MP.canReport(allReports(), state.uid, report.type, report.targetId, now())) {
+            toast("You just reported that. Give it 2 minutes so one person can't flood the feed.");
+            return false;
         }
-        weatherRefresh.disabled = true;
-        weatherRefresh.textContent = "Finding location…";
-        document.getElementById("weather-loading").hidden = false;
-        document.getElementById("current-weather-content").hidden = true;
-        document.getElementById("weather-metrics").hidden = true;
-        document.getElementById("weather-error").hidden = true;
-        if (lastWeatherCoordinates) {
-            loadWeather(lastWeatherCoordinates);
-            return;
+        try {
+            await store.addReport({ ...report, reporterId: state.uid, at: now() });
+            toast(okMsg + " +10 points");
+            return true;
+        } catch (e) {
+            console.error(e);
+            toast("Couldn't send that report. Check your connection and try again.");
+            return false;
         }
+    }
+    function reportCrossing(id, status) {
+        const c = D.CROSSINGS.find(x => x.id === id);
+        submit({ type: "crossing", targetId: id, status, label: c.name, lat: c.lat, lng: c.lng },
+            status === "blocked" ? `Thanks! ${c.name} reported blocked.` : `Thanks! ${c.name} marked clear.`);
+    }
+
+    // GPS helpers
+    function withLocation(cb) {
+        if (!navigator.geolocation) { toast("Location isn't available in this browser."); return; }
+        toast("Finding your location…");
         navigator.geolocation.getCurrentPosition(
-            position => {
-                lastWeatherCoordinates = position.coords;
-                loadWeather(lastWeatherCoordinates);
-            },
-            error => {
-                const message = error.code === error.PERMISSION_DENIED
-                    ? "Location access was denied. Allow location access to see weather for your current location."
-                    : "We could not determine your location. Try refreshing weather again.";
-                setWeatherError(message);
-                weatherRefresh.disabled = false;
-                weatherRefresh.textContent = "Refresh weather";
-            },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+            pos => cb({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+            () => toast("Couldn't get your location. Pick from the list instead."),
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
         );
     }
+    $("report-crossing-near").addEventListener("click", () => withLocation(p => {
+        const n = MP.nearest(p, D.CROSSINGS);
+        if (!n || n.meters > 3000) { toast("You're not near a campus rail crossing."); return; }
+        if (confirm(`Report a train at the ${n.item.name} crossing (${n.meters} m away)?`)) reportCrossing(n.item.id, "blocked");
+    }));
 
-    if (weatherRefresh) {
-        weatherRefresh.addEventListener("click", () => {
-            lastWeatherCoordinates = null;
-            requestWeather();
+    // ======================================================================
+    //  CLOSURES (picker, zero typing)
+    // ======================================================================
+    const kindGrid = $("closure-kind-grid");
+    D.CLOSURE_KINDS.forEach(k => {
+        const b = el("button", "chip", k.label); b.type = "button"; b.setAttribute("role", "radio"); b.setAttribute("aria-checked", "false");
+        b.addEventListener("click", () => {
+            state.pickedClosureKind = k.id;
+            kindGrid.querySelectorAll(".chip").forEach(x => { const on = x === b; x.classList.toggle("on", on); x.setAttribute("aria-checked", String(on)); });
         });
-        requestWeather(); // Load weather immediately on startup.
+        kindGrid.appendChild(b);
+    });
+    const placeSel = $("closure-place");
+    D.PLACES.forEach(p => { const o = el("option", null, p.name); o.value = p.id; placeSel.appendChild(o); });
+    function setPickedPlace(p) {
+        state.pickedPlace = p;
+        let opt = placeSel.querySelector('option[value="__picked"]');
+        if (p && !D.PLACES.some(x => x.id === p.id)) {
+            if (!opt) { opt = el("option"); opt.value = "__picked"; placeSel.insertBefore(opt, placeSel.children[1]); }
+            opt.textContent = p.name; placeSel.value = "__picked";
+        } else if (p) placeSel.value = p.id;
     }
-
-    // ======================================================================
-    //  TRAIN-CROSSING ALERT CONFIRMATION (UC-01 operation contract)
-    //  A train-crossing alert is only raised when two DISTINCT reporters
-    //  confirm the same crossing within a 5-minute window. This keeps a
-    //  single prankster or an accidental tap from firing an alert. This is
-    //  the pure decision function behind UC-01's confirmAndNotify contract;
-    //  it is exposed on window so the test suite can exercise it directly.
-    // ======================================================================
-    const CONFIRMATION_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
-
-    function shouldConfirmCrossingAlert(reportA, reportB) {
-        if (!reportA || !reportB) return false;
-        // Reports must be for the same crossing...
-        if (reportA.crossingId !== reportB.crossingId) return false;
-        // ...from two different reporters...
-        if (reportA.reporterId === reportB.reporterId) return false;
-        // ...within the confirmation window.
-        const gap = Math.abs(new Date(reportA.timestamp) - new Date(reportB.timestamp));
-        return gap <= CONFIRMATION_WINDOW_MS;
-    }
-    window.shouldConfirmCrossingAlert = shouldConfirmCrossingAlert;
-
-    // ======================================================================
-    //  LIVE CAMPUS-AREA WEATHER ALERTS (National Weather Service)
-    //  Real NWS watches/warnings for the UTA campus area are surfaced as
-    //  alert cards at the top of the Alerts tab. The National Weather
-    //  Service API is a public U.S. government service (no API key), and
-    //  returns active alerts as GeoJSON. UTA sits in Tarrant County, whose
-    //  NWS public zone is TXZ119 (FIPS county code 048439).
-    // ======================================================================
-    const NWS_ALERTS_ENDPOINT = "https://api.weather.gov/alerts/active?area=TX";
-    const CAMPUS_AREA_KEYWORDS = ["tarrant", "arlington"]; // Filter statewide feed down to campus.
-    const nwsAlertContainer = document.getElementById("nws-alert-list");
-    const nwsAlertStatus = document.getElementById("nws-alert-status");
-
-    // Pure, testable helper: given the raw NWS features and a set of
-    // keywords, return only the alerts whose areaDesc matches the campus
-    // area, sorted most-severe first. Exposed on window for the test suite.
-    function filterCampusAlerts(features, keywords) {
-        const severityRank = { Extreme: 0, Severe: 1, Moderate: 2, Minor: 3, Unknown: 4 };
-        return (features || [])
-            .map(feature => feature.properties || {})
-            .filter(properties => {
-                const areaText = (properties.areaDesc || "").toLowerCase();
-                return keywords.some(keyword => areaText.includes(keyword));
-            })
-            .sort((a, b) => (severityRank[a.severity] ?? 5) - (severityRank[b.severity] ?? 5));
-    }
-    window.filterCampusAlerts = filterCampusAlerts;
-
-    function renderCampusAlerts(alerts) {
-        if (!nwsAlertContainer) return;
-        if (!alerts.length) {
-            // No active alerts is the normal case; keep the section quiet.
-            nwsAlertContainer.innerHTML = "";
-            if (nwsAlertStatus) nwsAlertStatus.textContent = "No active weather alerts for the campus area.";
-            return;
+    function nearestPlaceName(lat, lng) { const n = MP.nearest({ lat, lng }, D.PLACES); return n ? n.item.name : "campus"; }
+    placeSel.addEventListener("change", () => {
+        if (placeSel.value === "__picked") return;
+        state.pickedPlace = D.PLACES.find(p => p.id === placeSel.value) || null;
+    });
+    $("closure-use-gps").addEventListener("click", () => withLocation(p => {
+        setPickedPlace({ id: "gps", name: `Near ${nearestPlaceName(p.lat, p.lng)} (my location)`, lat: p.lat, lng: p.lng });
+        toast("Location set.");
+    }));
+    let pickingOnMap = false;
+    $("closure-pick-map").addEventListener("click", () => {
+        pickingOnMap = true;
+        document.body.classList.add("picking");
+        switchView("map");
+        toast("Tap the map where the closure is.");
+    });
+    $("closure-submit").addEventListener("click", async () => {
+        const msg = $("closure-msg");
+        const r = MP.createClosureReport(state.pickedPlace, state.pickedClosureKind, state.uid, now());
+        if (!state.pickedClosureKind) { msg.textContent = "Pick what kind of issue it is."; return; }
+        if (!r) { msg.textContent = "Pick a location (list, GPS, or map)."; return; }
+        msg.textContent = "";
+        if (await submit(r, "Closure posted for everyone.")) {
+            state.pickedClosureKind = null; state.pickedPlace = null; placeSel.value = "";
+            kindGrid.querySelectorAll(".chip").forEach(x => { x.classList.remove("on"); x.setAttribute("aria-checked", "false"); });
         }
-        if (nwsAlertStatus) {
-            nwsAlertStatus.textContent = `${alerts.length} active weather alert${alerts.length === 1 ? "" : "s"} near campus`;
-        }
-        nwsAlertContainer.innerHTML = "";
-        alerts.forEach(alert => {
-            const card = document.createElement("div");
-            card.className = "weather-card nws-alert-card";
-            const severity = alert.severity && alert.severity !== "Unknown" ? alert.severity : "Advisory";
-            const meta = document.createElement("div");
-            meta.className = "weather-meta";
-            meta.innerHTML = `<span>${severity} · NWS</span><span>${alert.event || "Weather alert"}</span>`;
-            const heading = document.createElement("h4");
-            heading.textContent = alert.headline || alert.event || "Active weather alert";
-            const body = document.createElement("p");
-            const area = alert.areaDesc ? `${alert.areaDesc}. ` : "";
-            body.textContent = area + (alert.instruction || alert.description || "Stay alert for changing conditions.").slice(0, 180);
-            card.append(meta, heading, body);
-            nwsAlertContainer.appendChild(card);
+    });
+
+    function renderClosures() {
+        const list = $("closure-list");
+        const closures = MP.activeClosures(allReports(), now());
+        drawClosureLayer(closures);
+        list.innerHTML = "";
+        if (!closures.length) { list.appendChild(el("p", "empty-alerts", "No closures reported in the last 12 hours.")); return; }
+        closures.forEach(c => {
+            const card = el("article", "report-card");
+            const kind = (D.CLOSURE_KINDS.find(k => k.id === c.kind) || {}).label || "Closure";
+            const meta = el("div", "weather-meta");
+            meta.append(el("span", null, kind), el("span", null, MP.minutesAgo(c.at, now())));
+            card.append(meta, el("h4", null, c.label), el("p", null, `${c.reporterCount} commuter${c.reporterCount === 1 ? "" : "s"} reported this`));
+            const row = el("div", "row-btns");
+            const same = el("button", "pill-btn ok", "Still there"); same.type = "button";
+            same.addEventListener("click", () => submit({ ...MP.createClosureReport({ id: c.targetId, name: c.label, lat: c.lat, lng: c.lng }, c.kind, state.uid, now()) }, "Thanks for confirming."));
+            const mapBtn = el("button", "pill-btn", "Map"); mapBtn.type = "button";
+            mapBtn.addEventListener("click", () => { switchView("map"); if (map) map.setView([c.lat, c.lng], 17); });
+            row.append(same, mapBtn);
+            if (store.isAdmin || c.reporterId === state.uid) {
+                const rm = el("button", "pill-btn danger", store.isAdmin ? "Remove (admin)" : "Remove mine"); rm.type = "button";
+                rm.addEventListener("click", () => {
+                    const ids = allReports().filter(x => x.type === "closure" && x.targetId === c.targetId && x.kind === c.kind && (store.isAdmin || x.reporterId === state.uid)).map(x => x.id);
+                    Promise.all(ids.map(id => store.removeReport(id))).then(() => toast("Removed.")).catch(() => toast("Couldn't remove it."));
+                });
+                row.appendChild(rm);
+            }
+            card.appendChild(row);
+            list.appendChild(card);
         });
     }
 
-    async function loadCampusAlerts() {
-        if (!nwsAlertContainer) return;
-        if (nwsAlertStatus) nwsAlertStatus.textContent = "Checking for live weather alerts…";
-        try {
-            const response = await fetch(NWS_ALERTS_ENDPOINT, {
-                headers: { "Accept": "application/geo+json" }
+    // ======================================================================
+    //  PARKING report
+    // ======================================================================
+    const lotSel = $("lot-select");
+    D.PARKING.forEach(l => { const o = el("option", null, l.name); o.value = l.id; lotSel.appendChild(o); });
+    document.querySelectorAll("[data-lot-status]").forEach(b => b.addEventListener("click", async () => {
+        const lot = D.PARKING.find(l => l.id === lotSel.value);
+        if (await submit({ type: "lot", targetId: lot.id, status: b.dataset.lotStatus, label: lot.name, lat: lot.lat, lng: lot.lng },
+            `${lot.name} marked ${b.dataset.lotStatus === "full" ? "full" : "open"}.`)) {
+            $("lot-msg").textContent = "Shown on the map's Parking layer for 90 minutes.";
+        }
+    }));
+
+    // ======================================================================
+    //  STUDY SPOTS
+    // ======================================================================
+    function studyState(s) {
+        const rep = MP.latestStatus(allReports(), "study", s.id, now(), MP.RULES.STUDY_TTL_MS);
+        return MP.studyStatus(rep, now());
+    }
+    function studyLabel(s, st) {
+        return st.source === "live"
+            ? `${st.status === "busy" ? "Busy" : "Open"} · reported ${MP.minutesAgo(st.at, now())}`
+            : "No report in the last hour";
+    }
+    let studyOnlyOpen = false;
+    document.querySelectorAll("[data-study-filter]").forEach(btn => btn.addEventListener("click", () => {
+        studyOnlyOpen = btn.dataset.studyFilter === "open";
+        document.querySelectorAll("[data-study-filter]").forEach(b => {
+            const on = b === btn; b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on));
+        });
+        renderStudy();
+    }));
+    function renderStudy() {
+        const list = $("study-list");
+        list.innerHTML = "";
+        let shown = 0;
+        D.STUDY_SPOTS.forEach(s => {
+            const st = studyState(s);
+            if (studyOnlyOpen && !(st.source === "live" && st.status === "open")) return;
+            shown += 1;
+            const card = el("div", "study-card" + (st.source === "live" ? " has-live-report" : ""));
+            card.appendChild(el("div", "card-title-main", s.name));
+            const label = el("div", "study-status " + (st.source === "live" ? st.status : "none"), studyLabel(s, st));
+            card.appendChild(label);
+            const row = el("div", "study-report-row");
+            row.appendChild(el("span", "study-report-prompt", "Here now?"));
+            [["busy", "It's busy"], ["open", "It's open"]].forEach(([status, text]) => {
+                const b = el("button", "study-report-btn", text); b.type = "button";
+                b.addEventListener("click", () => submit({ type: "study", targetId: s.id, status, label: s.name, lat: s.lat, lng: s.lng }, `Thanks! ${s.name} marked ${status}.`));
+                row.appendChild(b);
             });
-            if (!response.ok) throw new Error(`NWS returned ${response.status}.`);
-            const data = await response.json();
-            renderCampusAlerts(filterCampusAlerts(data.features, CAMPUS_AREA_KEYWORDS));
-        } catch (error) {
-            // On failure, stay silent in the UI rather than showing a scary error;
-            // the hardcoded campus updates below still give the user something.
-            console.error("Unable to load live campus weather alerts.", error);
-            if (nwsAlertStatus) nwsAlertStatus.textContent = "Live weather alerts are temporarily unavailable.";
-        }
+            card.appendChild(row);
+            list.appendChild(card);
+        });
+        if (!shown) list.appendChild(el("p", "study-empty-state", "Nobody has reported an open spot in the last hour. Be the first: tap \"It's open\" where you are."));
     }
-
-    loadCampusAlerts(); // Check for real alerts on startup.
 
     // ======================================================================
-    //  CROWDSOURCED CLOSURE REPORTS
-    //  There is no free public live feed for road/lane closures, so commuters
-    //  report them here, the same crowdsourcing model the app uses for train
-    //  crossings and study spots. The app has no backend yet, so reports are
-    //  saved in this browser's localStorage; syncing reports across users is a
-    //  planned backend step (e.g. Firebase). Report creation and the
-    //  recent-reports filter are pure, tested functions.
+    //  SHUTTLES (real MavMover schedule + TripShot link)
     // ======================================================================
-    const CLOSURE_REPORTS_KEY = "campus-app-closure-reports";
-    const REPORT_MAX_AGE_MS = 12 * 60 * 60 * 1000; // show reports from the last 12 hours
-
-    // Pure: build a validated report object, or return null if invalid.
-    function createClosureReport(location, note, now) {
-        const trimmedLocation = (location || "").trim();
-        if (trimmedLocation.length < 3) return null; // need a real location
-        return {
-            id: `r-${now}-${Math.random().toString(36).slice(2, 7)}`,
-            location: trimmedLocation.slice(0, 80),
-            note: (note || "").trim().slice(0, 120),
-            at: new Date(now).toISOString(),
-            source: "user"
-        };
+    $("tripshot-link").href = D.LINKS.tripshot;
+    function renderRoutes() {
+        const list = $("route-list");
+        list.innerHTML = "";
+        const d = new Date();
+        let running = 0;
+        D.ROUTES.forEach(r => {
+            const st = MP.routeStatus(r, d);
+            if (st.running) running += 1;
+            const card = el("details", "route-card" + (st.running ? " running" : ""));
+            const sum = el("summary");
+            const badge = el("span", "route-badge"); badge.style.background = r.color;
+            sum.append(badge, el("span", "route-name", r.name), el("span", "route-status", st.label));
+            card.appendChild(sum);
+            card.appendChild(el("div", "route-stops", r.stops.length ? r.stops.map(s => s.name).join(" → ") : "Evening route: stops listed in TripShot."));
+            list.appendChild(card);
+        });
+        $("transit-updated").textContent = `${running} of ${D.ROUTES.length} routes in service now · ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+        return running;
     }
-    window.createClosureReport = createClosureReport;
 
-    // Pure: keep only reports newer than the max age, newest first.
-    function activeReports(reports, now, maxAgeMs) {
-        return (reports || [])
-            .filter(report => report && report.at && (now - new Date(report.at).getTime()) <= maxAgeMs)
-            .sort((a, b) => new Date(b.at) - new Date(a.at));
-    }
-    window.activeReports = activeReports;
-
-    const reportToggleBtn = document.getElementById("report-toggle-btn");
-    const reportForm = document.getElementById("report-form");
-    const reportLocationInput = document.getElementById("report-location");
-    const reportNoteInput = document.getElementById("report-note");
-    const reportError = document.getElementById("report-error");
-    const reportList = document.getElementById("report-list");
-
-    function loadClosureReports() {
+    // ======================================================================
+    //  WEATHER (Open-Meteo, campus by default) + NWS ALERTS (with map areas)
+    // ======================================================================
+    const WX = {
+        0: ["Clear", "☀️"], 1: ["Mainly clear", "🌤️"], 2: ["Partly cloudy", "⛅"], 3: ["Overcast", "☁️"],
+        45: ["Fog", "🌫️"], 48: ["Fog", "🌫️"], 51: ["Light drizzle", "🌦️"], 53: ["Drizzle", "🌦️"], 55: ["Drizzle", "🌧️"],
+        61: ["Light rain", "🌦️"], 63: ["Rain", "🌧️"], 65: ["Heavy rain", "🌧️"], 71: ["Light snow", "🌨️"], 73: ["Snow", "🌨️"],
+        75: ["Heavy snow", "❄️"], 80: ["Showers", "🌦️"], 81: ["Showers", "🌧️"], 82: ["Heavy showers", "⛈️"],
+        95: ["Thunderstorms", "⛈️"], 96: ["Thunderstorms, hail", "⛈️"], 99: ["Thunderstorms, hail", "⛈️"]
+    };
+    async function loadWeather() {
+        const [lat, lng] = D.CAMPUS_CENTER;
+        const p = new URLSearchParams({
+            latitude: lat, longitude: lng, current: "temperature_2m,apparent_temperature,weather_code,wind_speed_10m",
+            daily: "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+            temperature_unit: "fahrenheit", wind_speed_unit: "mph", forecast_days: "1", timezone: "America/Chicago"
+        });
         try {
-            const reports = JSON.parse(localStorage.getItem(CLOSURE_REPORTS_KEY) || "[]");
-            return Array.isArray(reports) ? reports : [];
-        } catch (error) {
-            console.error("Unable to load closure reports.", error);
-            return [];
+            const res = await fetch(`https://api.open-meteo.com/v1/forecast?${p}`);
+            if (!res.ok) throw new Error(res.status);
+            const d = await res.json();
+            const [cond, icon] = WX[d.current.weather_code] || ["Current conditions", "🌡️"];
+            state.weather = { temp: d.current.temperature_2m, condition: cond, rainChance: d.daily.precipitation_probability_max[0] };
+            $("current-weather-icon").textContent = icon;
+            $("current-temperature").textContent = Math.round(d.current.temperature_2m);
+            $("current-condition").textContent = cond;
+            $("weather-sub").textContent = `Feels ${Math.round(d.current.apparent_temperature)}° · H ${Math.round(d.daily.temperature_2m_max[0])}° L ${Math.round(d.daily.temperature_2m_min[0])}° · Wind ${Math.round(d.current.wind_speed_10m)} mph · Rain ${d.daily.precipitation_probability_max[0]}%`;
+        } catch (e) {
+            console.error("Weather unavailable", e);
+            $("current-condition").textContent = "Weather unavailable right now";
         }
+        renderBrief();
     }
-    function saveClosureReports(reports) {
+    $("weather-refresh").addEventListener("click", loadWeather);
+
+    const NWS = "https://api.weather.gov";
+    async function loadNws() {
         try {
-            localStorage.setItem(CLOSURE_REPORTS_KEY, JSON.stringify(reports));
-        } catch (error) {
-            console.error("Unable to save closure reports.", error);
+            const res = await fetch(`${NWS}/alerts/active?area=TX`, { headers: { Accept: "application/geo+json" } });
+            if (!res.ok) throw new Error(res.status);
+            const data = await res.json();
+            const features = (data.features || []).filter(f => MP.filterCampusAlerts([f], ["tarrant", "arlington"]).length);
+            state.nwsAlerts = MP.filterCampusAlerts(features, ["tarrant", "arlington"]);
+            renderNws();
+            drawAlertAreas(features);
+            features.forEach(f => maybeNotify({ type: "weather", severity: f.properties.severity, key: "wx-" + f.properties.id, title: f.properties.event, body: f.properties.headline || "" }));
+        } catch (e) {
+            console.error("NWS unavailable", e);
+            $("nws-alert-status").textContent = "Live weather alerts are temporarily unavailable.";
         }
+        renderBrief();
     }
-    function reportMinutesAgo(iso) {
-        const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-        if (mins <= 0) return "just now";
-        if (mins === 1) return "1 min ago";
-        if (mins < 60) return `${mins} min ago`;
-        const hours = Math.round(mins / 60);
-        return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+    function renderNws() {
+        const list = $("nws-alert-list");
+        list.innerHTML = "";
+        const a = state.nwsAlerts;
+        $("nws-alert-status").textContent = a.length ? `${a.length} active alert${a.length === 1 ? "" : "s"} for Tarrant County` : "No active NWS alerts for Tarrant County right now.";
+        a.forEach(al => {
+            const card = el("div", "weather-card nws-alert-card");
+            const meta = el("div", "weather-meta");
+            meta.append(el("span", null, `${al.severity || "Advisory"} · NWS`), el("span", null, al.event || ""));
+            const ends = al.ends || al.expires;
+            card.append(meta, el("h4", null, al.headline || al.event), el("p", null, (al.instruction || al.description || "").slice(0, 200) + (ends ? ` Until ${new Date(ends).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}.` : "")));
+            const mapBtn = el("button", "pill-btn", "See area on map"); mapBtn.type = "button";
+            mapBtn.addEventListener("click", () => { switchView("map"); if (map && alertBounds) map.fitBounds(alertBounds, { maxZoom: 11 }); });
+            card.appendChild(mapBtn);
+            list.appendChild(card);
+        });
+    }
+    let alertBounds = null;
+    async function drawAlertAreas(features) {
+        if (!map) return;
+        layers.alerts.clearLayers();
+        alertBounds = null;
+        const style = { color: "#d95325", weight: 2, fillOpacity: 0.15 };
+        let needCounty = false;
+        features.forEach(f => {
+            if (f.geometry) {
+                const g = L.geoJSON(f.geometry, { style }).bindPopup(popupHTML(f.properties.event, [f.properties.areaDesc]));
+                g.addTo(layers.alerts);
+                alertBounds = alertBounds ? alertBounds.extend(g.getBounds()) : g.getBounds();
+            } else needCounty = true;
+        });
+        if (needCounty) {
+            // Zone-based alerts have no polygon; draw Tarrant County's NWS zone.
+            try {
+                const z = await (await fetch(`${NWS}/zones/county/TXC439`, { headers: { Accept: "application/geo+json" } })).json();
+                const events = features.filter(f => !f.geometry).map(f => f.properties.event).join(", ");
+                const g = L.geoJSON(z.geometry, { style }).bindPopup(popupHTML(events, ["Tarrant County (NWS county zone)"]));
+                g.addTo(layers.alerts);
+                alertBounds = alertBounds ? alertBounds.extend(g.getBounds()) : g.getBounds();
+            } catch (e) { console.error("Zone outline unavailable", e); }
+        }
+        updateMapFooter();
     }
 
-    function renderClosureReports() {
-        if (!reportList) return;
-        const reports = activeReports(loadClosureReports(), Date.now(), REPORT_MAX_AGE_MS);
-        if (!reports.length) {
-            reportList.innerHTML = '<p class="empty-alerts">No community reports right now. Be the first to report one.</p>';
+    // ======================================================================
+    //  MORNING BRIEF
+    // ======================================================================
+    function renderBrief() {
+        const running = D.ROUTES.filter(r => MP.routeStatus(r, new Date()).running).length;
+        const brief = MP.buildBrief({
+            weather: state.weather, alerts: state.nwsAlerts,
+            crossings: crossingStates().map(c => state.simReports.some(r => r.targetId === c.id) ? { ...c, name: `${c.name} (simulated)` } : c),
+            closures: MP.activeClosures(allReports(), now()), routesRunning: running,
+            roadWork: state.roadWork ? state.roadWork.length : undefined,
+            mavAlerts: state.updates.filter(u => u.kind === "mavalert" && now() - u.at < 24 * 60 * MIN), now: now()
+        });
+        const card = $("brief-card");
+        card.dataset.level = brief.level;
+        $("brief-headline").textContent = brief.headline;
+        const ul = $("brief-lines");
+        ul.innerHTML = "";
+        brief.lines.forEach(l => { const li = el("li"); li.append(el("span", "brief-icon", l.icon), el("span", null, l.text)); ul.appendChild(li); });
+    }
+
+    // ======================================================================
+    //  CAMPUS UPDATES (admin-posted)
+    // ======================================================================
+    function renderUpdates() {
+        const mav = $("mavalert-list");
+        mav.innerHTML = "";
+        state.updates.filter(u => u.kind === "mavalert" && now() - u.at < 24 * 60 * MIN).forEach(u => {
+            const card = el("div", "orange-card mavalert-card");
+            const badge = el("div", "card-badge"); badge.innerHTML = '<span class="pulse-dot"></span>'; badge.append(" UTA MavAlert · relayed by a verified admin");
+            card.append(badge, el("h3", null, u.title), el("p", null, `${u.body} · ${MP.minutesAgo(u.at, now())}`));
+            mav.appendChild(card);
+        });
+        const list = $("update-list");
+        list.innerHTML = "";
+        if (!state.updates.length) {
+            list.appendChild(el("p", "empty-alerts", state.mode === "shared" ? "No admin updates right now." : "Admin updates appear when the shared backend is connected."));
             return;
         }
-        reportList.innerHTML = "";
-        reports.forEach(report => {
-            const card = document.createElement("article");
-            card.className = "report-card";
-            const meta = document.createElement("div");
-            meta.className = "weather-meta";
-            meta.innerHTML = `<span>Community report</span><span>${reportMinutesAgo(report.at)}</span>`;
-            const heading = document.createElement("h4");
-            heading.textContent = report.location;
-            card.append(meta, heading);
-            if (report.note) {
-                const note = document.createElement("p");
-                note.textContent = report.note;
-                card.appendChild(note);
+        state.updates.forEach(u => {
+            const card = el("article", "report-card admin-update");
+            const meta = el("div", "weather-meta");
+            meta.append(el("span", null, u.kind === "mavalert" ? "UTA MavAlert (relayed)" : "Verified admin"), el("span", null, MP.minutesAgo(u.at, now())));
+            card.append(meta, el("h4", null, u.title), el("p", null, u.body));
+            if (store.isAdmin) {
+                const rm = el("button", "pill-btn danger", "Remove"); rm.type = "button";
+                rm.addEventListener("click", () => store.removeUpdate(u.id).catch(() => toast("Couldn't remove.")));
+                card.appendChild(rm);
             }
-            const clear = document.createElement("button");
-            clear.className = "report-clear-btn";
-            clear.type = "button";
-            clear.dataset.clearReport = report.id;
-            clear.textContent = "Remove";
-            card.appendChild(clear);
-            reportList.appendChild(card);
+            list.appendChild(card);
         });
     }
 
-    if (reportToggleBtn && reportForm) {
-        reportToggleBtn.addEventListener("click", () => {
-            const open = reportForm.hidden;
-            reportForm.hidden = !open;
-            reportToggleBtn.setAttribute("aria-expanded", String(open));
-            reportToggleBtn.textContent = open ? "Close" : "Report a closure";
-            if (open && reportLocationInput) reportLocationInput.focus();
-        });
+    // ======================================================================
+    //  POINTS / MOTIVATION
+    // ======================================================================
+    function renderPoints() {
+        const s = MP.contributorStats(state.reports, state.uid);
+        const today = MP.activeReports(state.reports, now(), 24 * 60 * MIN);
+        const people = new Set(today.map(r => r.reporterId)).size;
+        const html = card => {
+            card.innerHTML = "";
+            const top = el("div", "points-top");
+            top.append(el("div", "points-num", String(s.points)), el("div", "points-level", `${s.level}${s.nextLevel ? ` · ${s.toNext} pts to ${s.nextLevel}` : ""}`));
+            card.appendChild(top);
+            card.appendChild(el("div", "points-sub", `${s.reports} report${s.reports === 1 ? "" : "s"} · ${s.confirmed} backed up by another commuter (+5 each)`));
+            card.appendChild(el("div", "points-sub", `Community today: ${today.length} report${today.length === 1 ? "" : "s"} from ${people} commuter${people === 1 ? "" : "s"}`));
+        };
+        html($("points-card"));
+        html($("profile-points"));
+    }
 
-        reportForm.addEventListener("submit", event => {
-            event.preventDefault();
-            const report = createClosureReport(
-                reportLocationInput ? reportLocationInput.value : "",
-                reportNoteInput ? reportNoteInput.value : "",
-                Date.now()
-            );
-            if (!report) {
-                if (reportError) reportError.textContent = "Please enter a location (at least 3 characters).";
-                return;
+    // ======================================================================
+    //  NOTIFICATIONS (commuter / quiet / off)
+    // ======================================================================
+    const MODE_HELP = {
+        commuter: "Confirmed train blocks, new closures, and all NWS weather alerts. Never fires on a single unconfirmed tap.",
+        quiet: "Only Severe or Extreme NWS weather warnings. Good if you live on campus.",
+        off: "No notifications. You can still see everything in the app."
+    };
+    function renderNotifyMode() {
+        document.querySelectorAll("#notify-mode button").forEach(b => {
+            const on = b.dataset.mode === state.notifyMode;
+            b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); b.setAttribute("role", "radio");
+        });
+        $("notify-help").textContent = MODE_HELP[state.notifyMode];
+    }
+    document.querySelectorAll("#notify-mode button").forEach(b => b.addEventListener("click", async () => {
+        state.notifyMode = b.dataset.mode;
+        savePref("mavpulse-notify-mode", state.notifyMode);
+        renderNotifyMode();
+        if (state.notifyMode !== "off" && "Notification" in window && Notification.permission === "default") {
+            try { await Notification.requestPermission(); } catch (e) { /* older Safari */ }
+        }
+    }));
+    async function maybeNotify(event) {
+        if (state.notified.has(event.key)) return;
+        if (!MP.shouldNotify(state.notifyMode, event)) return;
+        state.notified.add(event.key);
+        savePref("mavpulse-notified", JSON.stringify([...state.notified].slice(-200)));
+        toast(`🔔 ${event.title}`);
+        if (!("Notification" in window) || Notification.permission !== "granted") return;
+        try {
+            const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+            if (reg) reg.showNotification(event.title, { body: event.body, icon: "icons/icon-192.png", tag: event.key });
+            else new Notification(event.title, { body: event.body, icon: "icons/icon-192.png" });
+        } catch (e) { console.warn("Notification failed", e); }
+    }
+    function notifyFromReports() {
+        crossingStates().filter(c => c.state === "confirmed").forEach(c => maybeNotify({
+            type: "crossing", state: "confirmed", key: `x-${c.id}-${c.since}`,
+            title: `Train blocking ${c.name}`, body: `Confirmed by ${c.reporters} commuters. ${c.detour}.`
+        }));
+        MP.activeClosures(state.reports, now()).filter(c => c.reporterId !== state.uid).forEach(c => maybeNotify({
+            type: "closure", key: `c-${c.targetId}-${c.kind}-${Math.floor(c.at / (30 * MIN))}`,
+            title: `${(D.CLOSURE_KINDS.find(k => k.id === c.kind) || {}).label || "Closure"}: ${c.label}`, body: "Reported by a commuter on MavPulse."
+        }));
+    }
+
+    // ======================================================================
+    //  TEST MODE: simulate a train (two fake reporters, local only)
+    // ======================================================================
+    const simSel = $("sim-crossing");
+    D.CROSSINGS.forEach(c => { const o = el("option", null, c.name); o.value = c.id; simSel.appendChild(o); });
+    simSel.value = "cooper";
+    $("sim-train").addEventListener("click", () => {
+        const c = D.CROSSINGS.find(x => x.id === simSel.value);
+        const t0 = now();
+        state.simReports = state.simReports.filter(r => r.targetId !== c.id);
+        state.simReports.push({ id: "sim-a-" + t0, type: "crossing", targetId: c.id, status: "blocked", reporterId: "sim-reporter-1", at: t0, label: c.name, lat: c.lat, lng: c.lng });
+        $("sim-msg").textContent = "Reporter 1 tapped. Reporter 2 taps in 3 seconds…";
+        renderAll();
+        setTimeout(() => {
+            const t1 = now();
+            state.simReports.push({ id: "sim-b-" + t1, type: "crossing", targetId: c.id, status: "blocked", reporterId: "sim-reporter-2", at: t1, label: c.name, lat: c.lat, lng: c.lng });
+            renderAll();
+            const shownMs = now() - t1;
+            $("sim-msg").textContent = `Confirmed. Alert appeared ${shownMs} ms after the second report (requirement: under 30 s). Auto-clears in 60 s.`;
+            setTimeout(() => { state.simReports = state.simReports.filter(r => r.targetId !== c.id); renderAll(); $("sim-msg").textContent = "Simulated train cleared."; }, 60 * 1000);
+        }, 3000);
+        closeSheet();
+        switchView("home");
+    });
+
+    // ======================================================================
+    //  PROFILE SHEET + ADMIN
+    // ======================================================================
+    function openSheet() { $("profile-sheet").hidden = false; $("sheet-backdrop").hidden = false; renderPoints(); }
+    function closeSheet() { $("profile-sheet").hidden = true; $("sheet-backdrop").hidden = true; }
+    $("open-profile").addEventListener("click", openSheet);
+    $("close-profile").addEventListener("click", closeSheet);
+    $("sheet-backdrop").addEventListener("click", closeSheet);
+    $("admin-volunteer").href = D.LINKS.teamEmail;
+
+    function renderAdmin() {
+        $("admin-area").hidden = !!store.isAdmin;
+        $("admin-panel").hidden = !store.isAdmin;
+        if (store.isAdmin) $("admin-who").textContent = store.adminEmail || "admin";
+        if (state.mode !== "shared") $("admin-msg").textContent = "Admin features need the shared backend (currently on-device mode).";
+    }
+    $("admin-form").addEventListener("submit", async e => {
+        e.preventDefault();
+        $("admin-msg").textContent = "Signing in…";
+        try {
+            await store.adminSignIn($("admin-email").value.trim(), $("admin-pass").value);
+            state.uid = store.uid;
+            $("admin-msg").textContent = "Welcome, admin.";
+            $("admin-pass").value = "";
+        } catch (err) { $("admin-msg").textContent = err.message || "Sign-in failed."; }
+        renderAdmin(); renderAll();
+    });
+    $("admin-signout").addEventListener("click", async () => {
+        await store.adminSignOut(); state.uid = store.uid; $("admin-msg").textContent = "Signed out."; renderAdmin(); renderAll();
+    });
+    $("update-form").addEventListener("submit", async e => {
+        e.preventDefault();
+        try {
+            await store.postUpdate({ title: $("update-title").value.trim(), body: $("update-body").value.trim(), kind: $("update-mavalert").checked ? "mavalert" : "update" });
+            $("update-form").reset(); $("admin-msg").textContent = "Update posted for everyone.";
+        } catch (err) { $("admin-msg").textContent = err.message; }
+    });
+
+    // PWA install prompt (Android/desktop Chrome)
+    let deferredInstall = null;
+    window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredInstall = e; $("install-btn").hidden = false; });
+    $("install-btn").addEventListener("click", async () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall = null; $("install-btn").hidden = true; });
+    if ("serviceWorker" in navigator && location.protocol === "https:") {
+        navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW registration failed", e));
+    }
+
+
+    // ======================================================================
+    //  OFFICIAL CITY DATA: road work, UP rail line, police calls, crime
+    // ======================================================================
+    $("link-mavalert").href = D.LINKS.mavalertSignup;
+    $("link-emergency").href = D.LINKS.utaEmergency;
+    $("link-hotline").href = D.LINKS.utaEmergencyLine;
+    state.roadWork = null;
+    async function loadRoadWork() {
+        const list = $("roadwork-list");
+        try {
+            state.roadWork = MP.activeRoadWork(await window.MP_CITY.roadWork(), now());
+            if (map) {
+                layers.roadwork.clearLayers();
+                state.roadWork.forEach(w => w.paths.forEach(path => {
+                    L.polyline(path.map(([x, y]) => [y, x]), { color: "#c2410c", weight: 6, opacity: 0.85, dashArray: "8 6" })
+                        .bindPopup(popupHTML(`City road work · ${w.kind}`, [w.segments.slice(0, 3).join(", "), `Barricades until ${new Date(w.until).toLocaleDateString([], { month: "short", day: "numeric" })}`, `Permit ${w.permit}`]))
+                        .addTo(layers.roadwork);
+                }));
             }
-            if (reportError) reportError.textContent = "";
-            const reports = loadClosureReports();
-            reports.unshift(report);
-            saveClosureReports(reports);
-            reportForm.reset();
-            reportForm.hidden = true;
-            reportToggleBtn.setAttribute("aria-expanded", "false");
-            reportToggleBtn.textContent = "Report a closure";
-            renderClosureReports();
-        });
+            list.innerHTML = "";
+            if (!state.roadWork.length) list.appendChild(el("p", "empty-alerts", "No city road work with barricades near campus right now."));
+            state.roadWork.slice(0, 6).forEach(w => {
+                const card = el("article", "report-card roadwork-card");
+                const meta = el("div", "weather-meta");
+                meta.append(el("span", null, `City permit · ${w.kind}`), el("span", null, `until ${new Date(w.until).toLocaleDateString([], { month: "short", day: "numeric" })}`));
+                card.append(meta, el("h4", null, [...new Set(w.segments)].slice(0, 2).join(" · ")), el("p", null, w.scope.slice(0, 140)));
+                const b = el("button", "pill-btn", "Map"); b.type = "button";
+                b.addEventListener("click", () => { switchView("map"); if (map && w.paths[0]) map.setView([w.paths[0][0][1], w.paths[0][0][0]], 17); });
+                card.appendChild(b);
+                list.appendChild(card);
+            });
+            if (state.roadWork.length > 6) list.appendChild(el("p", "section-hint", `+${state.roadWork.length - 6} more on the map.`));
+        } catch (e) {
+            console.error("City road work unavailable", e);
+            list.innerHTML = ""; list.appendChild(el("p", "empty-alerts", "City road-work data is temporarily unavailable."));
+        }
+        renderBrief(); updateMapFooter();
+    }
+    async function loadRail() {
+        if (!map) return;
+        try {
+            (await window.MP_CITY.railroads()).forEach(f => (f.geometry && f.geometry.paths || []).forEach(path => {
+                L.polyline(path.map(([x, y]) => [y, x]), { color: "#374151", weight: 3, opacity: 0.7, dashArray: "2 6", interactive: false }).addTo(layers.rail);
+            }));
+        } catch (e) { console.warn("Rail line unavailable", e); }
+    }
+    let safetyLoaded = false;
+    const CRIME_COLORS = { Assault: "#b91c1c", Robbery: "#7f1d1d", "Car break-in": "#c2410c", "Vehicle theft": "#ea580c", Burglary: "#a16207", Theft: "#ca8a04", Vandalism: "#6b7280", Drugs: "#7c3aed", Weapons: "#111827", Fraud: "#0e7490", Other: "#64748b" };
+    async function loadSafety() {
+        if (safetyLoaded) return;
+        safetyLoaded = true;
+        const card = $("safety-card");
+        card.textContent = "Loading Arlington Police Department data…";
+        try {
+            const [crime, calls] = await Promise.all([window.MP_CITY.crime(30), window.MP_CITY.policeCalls()]);
+            const sum = MP.summarizeCrime(crime, now(), 30);
+            layers.safety.clearLayers();
+            sum.mappable.forEach(c => L.circleMarker([c.lat, c.lng], { radius: 6, color: "#fff", weight: 1, fillColor: CRIME_COLORS[c.category] || "#64748b", fillOpacity: 0.75 })
+                .bindPopup(popupHTML(c.category, [new Date(c.at).toLocaleDateString([], { month: "short", day: "numeric" }), "Arlington PD reported offense"])).addTo(layers.safety));
+            calls.forEach(f => {
+                if (!f.geometry) return;
+                const a = f.attributes;
+                L.marker([f.geometry.y, f.geometry.x], { icon: dot("police", "🚓") })
+                    .bindPopup(popupHTML(`Active police call: ${(a.CallTypeDescription || "").toLowerCase()}`, [`${a.Location ? a.Location.trim() + " (block)" : ""}`, `Status: ${a.Status || "n/a"} · ${a.CallDate ? MP.minutesAgo(a.CallDate, now()) : ""}`]))
+                    .addTo(layers.safety);
+            });
+            card.innerHTML = "";
+            card.appendChild(el("div", "safety-title", `${sum.total} offenses reported near campus in the last 30 days · ${calls.length} active police call${calls.length === 1 ? "" : "s"} now`));
+            const chips = el("div", "safety-chips");
+            sum.byCategory.forEach(([name, n]) => { const c = el("span", "safety-chip", `${name} ${n}`); c.style.borderColor = CRIME_COLORS[name] || "#64748b"; chips.appendChild(c); });
+            card.appendChild(chips);
+            card.appendChild(el("p", "source-note", "Source: City of Arlington Police Department public data (crime updated nightly, calls every 15 min). Incidents handled by UTA Police on campus are not included. Sex offenses and juvenile cases are counted but never pinned on the map, to protect victims. For an emergency call 911."));
+            const a = el("a", "text-btn", "Search Arlington crime reports ↗"); a.href = D.LINKS.cityCrimeSearch; a.target = "_blank"; a.rel = "noopener";
+            card.appendChild(a);
+            updateMapFooter();
+        } catch (e) {
+            console.error("Safety data unavailable", e);
+            safetyLoaded = false;
+            card.textContent = "Arlington PD data is temporarily unavailable. Try again in a minute.";
+        }
     }
 
-    if (reportList) {
-        reportList.addEventListener("click", event => {
-            const clearBtn = event.target.closest("[data-clear-report]");
-            if (!clearBtn) return;
-            const reports = loadClosureReports().filter(report => report.id !== clearBtn.dataset.clearReport);
-            saveClosureReports(reports);
-            renderClosureReports();
-        });
+    // ======================================================================
+    //  LIVE GPS: blue dot + warnings for hazards near you
+    // ======================================================================
+    let watchId = null, meMarker = null, meCircle = null, followMe = true, lastHazardKey = "";
+    function hazardList() {
+        const h = [];
+        crossingStates().filter(c => c.state !== "clear").forEach(c => h.push({ lat: c.lat, lng: c.lng, label: `${c.name} rail crossing ${c.state === "confirmed" ? "blocked" : "reported blocked"}`, tip: c.detour }));
+        MP.activeClosures(allReports(), now()).forEach(c => h.push({ lat: c.lat, lng: c.lng, label: `${(D.CLOSURE_KINDS.find(k => k.id === c.kind) || {}).label || "Closure"} at ${c.label}` }));
+        (state.roadWork || []).forEach(w => { const p = w.paths[0] && w.paths[0][0]; if (p) h.push({ lat: p[1], lng: p[0], label: `City road work: ${w.segments[0] || w.kind}` }); });
+        return h;
+    }
+    function updateHazardBanner(pos) {
+        const near = MP.nearbyHazards(pos, hazardList(), 1000);
+        const banner = $("hazard-banner");
+        if (!near.length) { banner.hidden = true; return; }
+        banner.hidden = false;
+        banner.innerHTML = "";
+        banner.appendChild(el("strong", null, `⚠️ ${near[0].meters} m from you: ${near[0].label}`));
+        if (near[0].tip) banner.appendChild(el("div", null, near[0].tip + "."));
+        if (near.length > 1) banner.appendChild(el("div", null, `+${near.length - 1} more within 1 km`));
+        const key = near[0].label;
+        if (key !== lastHazardKey) { lastHazardKey = key; toast(`⚠️ ${near[0].label} (${near[0].meters} m)`); }
+    }
+    function onPosition(p) {
+        const pos = { lat: p.coords.latitude, lng: p.coords.longitude };
+        state.myPos = pos;
+        if (!meMarker) {
+            meMarker = L.marker([pos.lat, pos.lng], { icon: L.divIcon({ className: "mp-marker", html: '<span class="me-dot"></span>', iconSize: [20, 20], iconAnchor: [10, 10] }), zIndexOffset: 2000 }).addTo(layers.me);
+            meCircle = L.circle([pos.lat, pos.lng], { radius: p.coords.accuracy, color: "#2563eb", weight: 1, fillOpacity: 0.1, interactive: false }).addTo(layers.me);
+            map.setView([pos.lat, pos.lng], 16);
+        } else {
+            meMarker.setLatLng([pos.lat, pos.lng]); meCircle.setLatLng([pos.lat, pos.lng]).setRadius(p.coords.accuracy);
+            if (followMe) map.panTo([pos.lat, pos.lng]);
+        }
+        updateHazardBanner(pos);
+    }
+    $("locate-btn").addEventListener("click", () => {
+        const btn = $("locate-btn");
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId); watchId = null;
+            layers.me.clearLayers(); meMarker = meCircle = null; state.myPos = null;
+            btn.setAttribute("aria-pressed", "false"); btn.textContent = "📍 Locate me"; $("hazard-banner").hidden = true;
+            return;
+        }
+        if (!navigator.geolocation) { toast("Location isn't available in this browser."); return; }
+        btn.setAttribute("aria-pressed", "true"); btn.textContent = "📍 Tracking… tap to stop";
+        followMe = true;
+        watchId = navigator.geolocation.watchPosition(onPosition, err => {
+            toast(err.code === 1 ? "Location permission denied. Enable it in your browser settings." : "Couldn't get your location.");
+            navigator.geolocation.clearWatch(watchId); watchId = null;
+            btn.setAttribute("aria-pressed", "false"); btn.textContent = "📍 Locate me";
+        }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+    });
+    if (map) map.on("dragstart", () => { followMe = false; });
+
+    // ======================================================================
+    //  RENDER LOOP
+    // ======================================================================
+    function renderAll() {
+        renderCrossings();
+        renderClosures();
+        renderStudy();
+        renderBrief();
+        renderUpdates();
+        renderPoints();
+        drawCrossingLayer();
+        drawParkingLayer();
+        drawStudyLayer();
+        updateMapFooter();
+        if (state.myPos) updateHazardBanner(state.myPos);
     }
 
-    renderClosureReports();
+    // Static/first paint before the store connects.
+    drawShuttleLayer();
+    renderRoutes();
+    renderNotifyMode();
+    renderAll();
+    loadWeather();
+    loadNws();
+    loadRoadWork();
+    loadRail();
+
+    // Connect the store (shared backend if configured, else on-device).
+    const { store: s, info } = await window.MP_STORE.createReportStore(window.MAVPULSE_FIREBASE_CONFIG);
+    store = s;
+    window.MP_APP = { get store() { return store; }, state };
+    state.uid = info.uid;
+    state.mode = info.mode;
+    const pill = $("sync-pill");
+    pill.textContent = info.mode === "shared" ? "● Live · shared" : "● On-device";
+    pill.classList.toggle("shared", info.mode === "shared");
+    $("about-note").textContent = info.mode === "shared"
+        ? "Reports sync live to every MavPulse user through the shared backend."
+        : "On-device mode: reports are saved in this browser only (shared backend not configured or unreachable).";
+    store.onReports(list => { state.reports = list; renderAll(); notifyFromReports(); });
+    store.onUpdates(list => {
+        state.updates = list; renderUpdates(); renderBrief();
+        list.filter(u => u.kind === "mavalert" && now() - u.at < 60 * MIN).forEach(u => maybeNotify({ type: "weather", severity: "Extreme", key: "mav-" + u.id, title: `UTA MavAlert: ${u.title}`, body: u.body }));
+    });
+    renderAdmin();
+
+    // Keep "x min ago" labels, schedules and expiries fresh.
+    setInterval(() => { renderAll(); renderRoutes(); }, 30 * 1000);
+    setInterval(loadNws, 5 * 60 * 1000);
+    setInterval(loadRoadWork, 30 * 60 * 1000);
+    setInterval(() => { if (safetyLoaded && map && map.hasLayer(layers.safety)) { safetyLoaded = false; loadSafety(); } }, 15 * 60 * 1000);
+    setInterval(loadWeather, 15 * 60 * 1000);
 });

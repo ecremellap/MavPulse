@@ -1,0 +1,355 @@
+/*
+ * MavPulse core logic
+ * -------------------
+ * Every rule the app decides with lives here as a pure function: no DOM,
+ * no network, no clock reads (callers pass `now`). That keeps each rule
+ * directly testable in Node (`node tests.js`) and in the browser
+ * (tests.html), and keeps the UI code in script.js thin.
+ */
+(function (root) {
+    "use strict";
+
+    const MINUTE = 60 * 1000;
+    const HOUR = 60 * MINUTE;
+
+    // ---------------------------------------------------------------
+    //  Tunable rules (one place, so the requirements doc can cite them)
+    // ---------------------------------------------------------------
+    const RULES = {
+        CONFIRMATION_WINDOW_MS: 5 * MINUTE,   // UC-01: two reporters within 5 min
+        CROSSING_BLOCK_TTL_MS: 20 * MINUTE,   // a block report expires after 20 min
+        CLOSURE_TTL_MS: 12 * HOUR,            // closures shown for 12 h
+        LOT_TTL_MS: 90 * MINUTE,              // "lot full" counts for 90 min
+        STUDY_TTL_MS: 60 * MINUTE,            // study report counts for 60 min
+        REPORT_COOLDOWN_MS: 2 * MINUTE,       // one report per target per 2 min
+        POINTS_PER_REPORT: 10,
+        POINTS_CONFIRMED_BONUS: 5
+    };
+
+    // =================================================================
+    //  UC-01  Train-crossing confirmation
+    // =================================================================
+
+    // Two reports confirm a block when they are for the same crossing,
+    // from two different people, within the confirmation window.
+    function shouldConfirmCrossingAlert(reportA, reportB) {
+        if (!reportA || !reportB) return false;
+        if (reportA.crossingId !== reportB.crossingId) return false;
+        if (reportA.reporterId === reportB.reporterId) return false;
+        const gap = Math.abs(new Date(reportA.timestamp) - new Date(reportB.timestamp));
+        return gap <= RULES.CONFIRMATION_WINDOW_MS;
+    }
+
+    // Live state of one crossing from all recent reports about it.
+    // Returns { state: "clear" | "reported" | "confirmed", lastAt, reporters }.
+    //   - A "clear" report newer than every "blocked" report clears it.
+    //   - Blocks expire CROSSING_BLOCK_TTL_MS after the latest block report.
+    //   - One reporter  -> "reported" (shown, marked unconfirmed).
+    //   - Two distinct reporters within the window -> "confirmed" (alerts fire).
+    function crossingState(reports, crossingId, now) {
+        const mine = (reports || [])
+            .filter(r => r && r.type === "crossing" && r.targetId === crossingId)
+            .sort((a, b) => a.at - b.at);
+        const lastClear = mine.filter(r => r.status === "clear").pop();
+        const blocks = mine.filter(r => r.status === "blocked"
+            && (!lastClear || r.at > lastClear.at)
+            && now - r.at <= RULES.CROSSING_BLOCK_TTL_MS);
+        if (!blocks.length) return { state: "clear", lastAt: lastClear ? lastClear.at : null, reporters: 0 };
+
+        const reporters = new Set(blocks.map(r => r.reporterId));
+        let confirmed = false;
+        let confirmedAt = null;
+        for (let i = 0; i < blocks.length && !confirmed; i++) {
+            for (let j = i + 1; j < blocks.length; j++) {
+                const a = { crossingId, reporterId: blocks[i].reporterId, timestamp: blocks[i].at };
+                const b = { crossingId, reporterId: blocks[j].reporterId, timestamp: blocks[j].at };
+                if (shouldConfirmCrossingAlert(a, b)) { confirmed = true; confirmedAt = blocks[j].at; break; }
+            }
+        }
+        return {
+            state: confirmed ? "confirmed" : "reported",
+            since: blocks[0].at,
+            lastAt: blocks[blocks.length - 1].at,
+            confirmedAt,
+            reporters: reporters.size
+        };
+    }
+
+    // =================================================================
+    //  Closures, parking, study spots (crowd reports)
+    // =================================================================
+
+    // Validated closure report from picker choices (no free typing).
+    function createClosureReport(place, kindId, reporterId, now) {
+        if (!place || typeof place.lat !== "number" || typeof place.lng !== "number") return null;
+        if (!kindId) return null;
+        const label = String(place.name || "").trim().slice(0, 80);
+        if (label.length < 3) return null;
+        return {
+            type: "closure", targetId: place.id || "custom", status: "active", kind: kindId,
+            label, lat: place.lat, lng: place.lng, reporterId: reporterId || "anon", at: now
+        };
+    }
+
+    // Recent reports of a type, newest first, within its time-to-live.
+    function activeReports(reports, now, maxAgeMs, type) {
+        return (reports || [])
+            .filter(r => r && typeof r.at === "number" && now - r.at <= maxAgeMs && (!type || r.type === type))
+            .sort((a, b) => b.at - a.at);
+    }
+
+    // Closure reports, de-duplicated by place + kind (newest wins) and
+    // carrying how many distinct people reported the same thing.
+    function activeClosures(reports, now) {
+        const groups = new Map();
+        activeReports(reports, now, RULES.CLOSURE_TTL_MS, "closure").forEach(r => {
+            const key = `${r.targetId}|${r.kind}`;
+            if (!groups.has(key)) groups.set(key, { ...r, reporters: new Set() });
+            groups.get(key).reporters.add(r.reporterId);
+        });
+        return [...groups.values()].map(g => ({ ...g, reporterCount: g.reporters.size, reporters: undefined }));
+    }
+
+    // Latest crowd status for one target (lot or study spot) within TTL.
+    function latestStatus(reports, type, targetId, now, ttlMs) {
+        const hit = activeReports(reports, now, ttlMs, type).find(r => r.targetId === targetId);
+        return hit || null;
+    }
+
+    // Anti-spam: the same person can't re-report the same target too fast.
+    function canReport(reports, reporterId, type, targetId, now) {
+        return !(reports || []).some(r => r.reporterId === reporterId && r.type === type
+            && r.targetId === targetId && now - r.at < RULES.REPORT_COOLDOWN_MS);
+    }
+
+    // ---- study spots: crowd reports only, no invented estimate ----
+    // Returns { source: "live", status, at } for a report inside the TTL,
+    // otherwise { source: "none" } so the UI says "No recent report".
+    function studyStatus(latestReport, now) {
+        if (!latestReport) return { source: "none" };
+        const at = typeof latestReport.at === "number" ? latestReport.at : new Date(latestReport.at).getTime();
+        if (now - at > RULES.STUDY_TTL_MS) return { source: "none" };
+        return { source: "live", status: latestReport.status, at };
+    }
+
+    // =================================================================
+    //  MavMover shuttle schedule
+    // =================================================================
+
+    // Is a route in service at `date`? School-year routes run Mon–Fri.
+    function routeStatus(route, date) {
+        const day = date.getDay();
+        const mins = date.getHours() * 60 + date.getMinutes();
+        const fmt = m => {
+            const h = Math.floor(m / 60), mm = m % 60;
+            const ampm = h >= 12 ? "PM" : "AM";
+            return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, "0")} ${ampm}`;
+        };
+        if (day === 0 || day === 6) return { running: false, label: "No weekend service" };
+        if (mins < route.start) return { running: false, label: `Starts ${fmt(route.start)}` };
+        if (mins >= route.end) return { running: false, label: "Done for today" };
+        return { running: true, label: `Running until ${fmt(route.end)}` };
+    }
+
+    // =================================================================
+    //  NWS weather alerts
+    // =================================================================
+
+    function filterCampusAlerts(features, keywords) {
+        const severityRank = { Extreme: 0, Severe: 1, Moderate: 2, Minor: 3, Unknown: 4 };
+        return (features || [])
+            .map(feature => feature.properties || {})
+            .filter(p => keywords.some(k => (p.areaDesc || "").toLowerCase().includes(k)))
+            .sort((a, b) => (severityRank[a.severity] ?? 5) - (severityRank[b.severity] ?? 5));
+    }
+
+    // =================================================================
+    //  Notifications: the "conflicting viewpoints" rule, in code.
+    //  Commuters want every crossing alert; on-campus students and staff
+    //  want almost none. Each user picks a mode; this decides.
+    // =================================================================
+    function shouldNotify(mode, event) {
+        if (!event || mode === "off") return false;
+        if (event.type === "weather") {
+            // Severe/Extreme weather always gets through unless notifications are off.
+            if (event.severity === "Extreme" || event.severity === "Severe") return true;
+            return mode === "commuter";
+        }
+        if (mode === "quiet") return false;
+        if (mode === "commuter") {
+            if (event.type === "crossing") return event.state === "confirmed"; // never on one unconfirmed tap
+            return event.type === "closure";
+        }
+        return false;
+    }
+
+    // =================================================================
+    //  Contributor points (motivation to tap "busy"/"open"/"blocked")
+    // =================================================================
+    const LEVELS = [
+        { min: 0, name: "Newcomer" }, { min: 50, name: "Regular" },
+        { min: 150, name: "Campus Scout" }, { min: 400, name: "Pulse Legend" }
+    ];
+
+    // A report is "confirmed" when someone else reported the same target
+    // with the same status within the confirmation window.
+    function contributorStats(reports, reporterId) {
+        const all = reports || [];
+        const mine = all.filter(r => r.reporterId === reporterId);
+        let confirmed = 0;
+        mine.forEach(r => {
+            const backedUp = all.some(o => o.reporterId !== reporterId && o.type === r.type
+                && o.targetId === r.targetId && o.status === r.status
+                && Math.abs(o.at - r.at) <= RULES.CONFIRMATION_WINDOW_MS);
+            if (backedUp) confirmed += 1;
+        });
+        const points = mine.length * RULES.POINTS_PER_REPORT + confirmed * RULES.POINTS_CONFIRMED_BONUS;
+        let level = LEVELS[0];
+        LEVELS.forEach(l => { if (points >= l.min) level = l; });
+        const next = LEVELS.find(l => l.min > points) || null;
+        return { reports: mine.length, confirmed, points, level: level.name, nextLevel: next ? next.name : null, toNext: next ? next.min - points : 0 };
+    }
+
+    // =================================================================
+    //  Morning brief: one card that answers "can I leave now?"
+    // =================================================================
+    function buildBrief(input) {
+        const lines = [];
+        const { weather, alerts, crossings, closures, routesRunning, roadWork, mavAlerts, now } = input;
+        let level = "good";
+        if (weather) {
+            lines.push({ icon: "🌡️", text: `${Math.round(weather.temp)}°F, ${weather.condition.toLowerCase()} · ${weather.rainChance}% chance of rain` });
+        }
+        if (mavAlerts && mavAlerts.length) {
+            lines.unshift({ icon: "🚨", text: `UTA MavAlert: ${mavAlerts[0].title}` });
+            level = "bad";
+        }
+        if (alerts && alerts.length) {
+            lines.push({ icon: "⚠️", text: `${alerts[0].event}${alerts.length > 1 ? ` (+${alerts.length - 1} more)` : ""}` });
+            if (level !== "bad") level = "warn";
+        }
+        const blocked = (crossings || []).filter(c => c.state !== "clear");
+        if (blocked.length) {
+            blocked.forEach(c => lines.push({
+                icon: "🚂",
+                text: `${c.name} crossing ${c.state === "confirmed" ? "blocked (confirmed)" : "reported blocked"} · ${minutesAgo(c.lastAt, now)}`
+            }));
+            level = "bad";
+        } else {
+            lines.push({ icon: "🚂", text: "No blocked rail crossings reported" });
+        }
+        const n = (closures || []).length;
+        lines.push({ icon: "🚧", text: n ? `${n} closure${n === 1 ? "" : "s"} reported near campus` : "No closures reported" });
+        if (n && level === "good") level = "warn";
+        if (typeof roadWork === "number" && roadWork > 0) {
+            lines.push({ icon: "🏗️", text: `${roadWork} active city road-work site${roadWork === 1 ? "" : "s"} near campus (official)` });
+        }
+        if (typeof routesRunning === "number") {
+            lines.push({ icon: "🚌", text: routesRunning ? `${routesRunning} MavMover route${routesRunning === 1 ? "" : "s"} running now` : "MavMover not running right now" });
+        }
+        const headline = level === "bad" ? "Heads up before you leave" : level === "warn" ? "Mostly clear, check the details" : "All clear for your commute";
+        return { level, headline, lines };
+    }
+
+    function minutesAgo(at, now) {
+        const mins = Math.round((now - at) / MINUTE);
+        if (mins <= 0) return "just now";
+        if (mins < 60) return `${mins} min ago`;
+        const h = Math.round(mins / 60);
+        return `${h} hour${h === 1 ? "" : "s"} ago`;
+    }
+
+    // Distance in meters (haversine), for "closest place to my GPS".
+    function distanceMeters(a, b) {
+        const R = 6371000, toRad = d => d * Math.PI / 180;
+        const dLat = toRad(b.lat - a.lat), dLng = toRad(b.lng - a.lng);
+        const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(h));
+    }
+
+    function nearest(point, items) {
+        let best = null, bestD = Infinity;
+        (items || []).forEach(it => { const d = distanceMeters(point, it); if (d < bestD) { bestD = d; best = it; } });
+        return best ? { item: best, meters: Math.round(bestD) } : null;
+    }
+
+
+    // =================================================================
+    //  City of Arlington open data (official sources)
+    // =================================================================
+
+    // Right-of-way permits -> road work active right now.
+    // Active = permit Issued, barricades installed, and the barricade
+    // removal date (or project end) has not passed. Groups segments by permit.
+    function activeRoadWork(features, now) {
+        const byPermit = new Map();
+        (features || []).forEach(f => {
+            const a = f.attributes || {};
+            if (a.Status !== "Issued" || !a.BarricadeInstall || a.BarricadeInstall > now) return;
+            const end = a.BarricadeRemove || a.ProjectEnd;
+            if (!end || end < now) return;
+            if (!byPermit.has(a.Permit)) {
+                byPermit.set(a.Permit, {
+                    permit: a.Permit, kind: (a.Sub || "Road work").trim(),
+                    scope: String(a.ScopeOfWork || "").replace(/\s+/g, " ").trim(),
+                    from: a.BarricadeInstall, until: end, segments: [], paths: []
+                });
+            }
+            const w = byPermit.get(a.Permit);
+            if (a.Segment) w.segments.push(a.Segment.trim());
+            if (f.geometry && f.geometry.paths) w.paths.push(...f.geometry.paths);
+        });
+        return [...byPermit.values()].sort((x, y) => x.until - y.until);
+    }
+
+    // Sensitive offense types: counted in the summary, never pinned on the
+    // map (protects victims' privacy). Juvenile cases are never pinned.
+    const SENSITIVE_CRIME = /SEX OFFENSE|RAPE|SODOMY|FONDLING|HUMAN TRAFFICKING|INCEST/i;
+
+    function crimeCategory(desc) {
+        const d = String(desc || "").toUpperCase();
+        if (/ROBBERY/.test(d)) return "Robbery";
+        if (/ASSAULT|INTIMIDATION/.test(d)) return "Assault";
+        if (/MOTOR VEHICLE THEFT/.test(d)) return "Vehicle theft";
+        if (/THEFT FROM MOTOR VEHICLE/.test(d)) return "Car break-in";
+        if (/BURGLARY/.test(d)) return "Burglary";
+        if (/THEFT|LARCENY|SHOPLIFT|STOLEN/.test(d)) return "Theft";
+        if (/VANDAL|DESTRUCTION|DAMAGE/.test(d)) return "Vandalism";
+        if (/DRUG|NARCOTIC/.test(d)) return "Drugs";
+        if (/WEAPON/.test(d)) return "Weapons";
+        if (/FRAUD|FORGERY|COUNTERFEIT|EMBEZZ/.test(d)) return "Fraud";
+        if (SENSITIVE_CRIME.test(d)) return "Sex offense";
+        return "Other";
+    }
+
+    // Summarise crime features from the last `days` days.
+    // Returns { total, byCategory: [[name, n]...], mappable: [...] }.
+    function summarizeCrime(features, now, days) {
+        const since = now - days * 24 * HOUR;
+        const recent = (features || []).map(f => ({ ...(f.attributes || {}), geometry: f.geometry }))
+            .filter(a => a.DateOfOccurrence && a.DateOfOccurrence >= since && a.DateOfOccurrence <= now);
+        const counts = {};
+        recent.forEach(a => { const c = crimeCategory(a.Description); counts[c] = (counts[c] || 0) + 1; });
+        const mappable = recent.filter(a => a.geometry && a.Juvenile !== "Yes" && !SENSITIVE_CRIME.test(a.Description || ""))
+            .map(a => ({ lat: a.geometry.y, lng: a.geometry.x, category: crimeCategory(a.Description), at: a.DateOfOccurrence }));
+        return { total: recent.length, byCategory: Object.entries(counts).sort((x, y) => y[1] - x[1]), mappable };
+    }
+
+    // Hazards within `radiusM` of a GPS position, nearest first.
+    function nearbyHazards(pos, hazards, radiusM) {
+        if (!pos) return [];
+        return (hazards || []).map(h => ({ ...h, meters: Math.round(distanceMeters(pos, h)) }))
+            .filter(h => h.meters <= radiusM).sort((a, b) => a.meters - b.meters);
+    }
+
+    const LOGIC = {
+        RULES, shouldConfirmCrossingAlert, crossingState, createClosureReport, activeReports,
+        activeClosures, latestStatus, canReport, studyStatus, routeStatus, filterCampusAlerts, shouldNotify, contributorStats,
+        buildBrief, minutesAgo, distanceMeters, nearest,
+        activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards
+    };
+    root.MP = LOGIC;
+    // Back-compat names used by the Iteration 2 tests.
+    Object.assign(root, { shouldConfirmCrossingAlert, filterCampusAlerts });
+    if (typeof module !== "undefined" && module.exports) module.exports = LOGIC;
+})(typeof window !== "undefined" ? window : globalThis);
