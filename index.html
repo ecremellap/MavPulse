@@ -42,11 +42,29 @@
     <symbol id="i-car" viewBox="0 0 24 24"><path d="M5 17H3v-5l2-5h14l2 5v5h-2"/><path d="M3 12h18"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/><path d="M9.5 17h5"/></symbol>
     <symbol id="i-police" viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5z"/><path d="M12 8l1.2 2.4 2.6.4-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.4z"/></symbol>
     <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v2.5M12 20v2.5M4.6 4.6l1.8 1.8M17.6 17.6l1.8 1.8M1.5 12H4M20 12h2.5M4.6 19.4l1.8-1.8M17.6 6.4l1.8-1.8"/></symbol>
+    <symbol id="i-partly" viewBox="0 0 24 24"><path d="M8 3v1.5M3.6 4.6l1 1M2 9h1.5M12.4 4.6l-1 1"/><path d="M5.3 11.2A4 4 0 1 1 11.6 7"/><path d="M17 20H8.5a4 4 0 1 1 1-7.9A5 5 0 0 1 19 13.5 3.3 3.3 0 0 1 17 20z"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H8a5 5 0 1 1 1.2-9.9A6 6 0 0 1 20.5 12 3.6 3.6 0 0 1 17.5 19z"/></symbol>
+    <symbol id="i-rain" viewBox="0 0 24 24"><path d="M17.5 15H8a5 5 0 1 1 1.2-9.9A6 6 0 0 1 20.5 8 3.6 3.6 0 0 1 17.5 15z"/><path d="M8 18l-1 3M12 18l-1 3M16 18l-1 3"/></symbol>
+    <symbol id="i-storm" viewBox="0 0 24 24"><path d="M17.5 14H8a5 5 0 1 1 1.2-9.9A6 6 0 0 1 20.5 7 3.6 3.6 0 0 1 17.5 14z"/><path d="M12.5 14l-2.5 4h4l-2.5 4"/></symbol>
+    <symbol id="i-fog" viewBox="0 0 24 24"><path d="M4 9h16M3 13h18M5 17h14M8 21h8"/></symbol>
+    <symbol id="i-snow" viewBox="0 0 24 24"><path d="M12 2v20M4 6l16 12M20 6 4 18"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3l-5.6 2.9 1.1-6.2L3 9.6l6.2-.9z"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></symbol>
   </defs>
 </svg>
 <div class="phone-container">
 <div class="phone-screen">
+    <div class="splash" id="splash" aria-hidden="true">
+        <svg class="splash-mark" viewBox="0 0 120 120">
+            <g stroke="#fff" stroke-width="13" stroke-linecap="butt"><path d="M18 22l84 48M102 22L18 70"/></g>
+            <rect x="20" y="82" width="80" height="30" rx="15" fill="#fff"/>
+            <circle class="lamp-a" cx="40" cy="97" r="9"/>
+            <circle class="lamp-b" cx="80" cy="97" r="9"/>
+        </svg>
+        <div class="splash-name">MavPulse</div>
+    </div>
 
     <header class="app-bar">
         <div class="app-brand"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#fff"/><g stroke="#0057a8" stroke-width="3.6" stroke-linecap="butt"><path d="M7 7.5l18 10.2M25 7.5L7 17.7"/></g><rect x="7.5" y="20.5" width="17" height="7" rx="3.5" fill="#0057a8"/><circle cx="11.6" cy="24" r="2.2" fill="#f26b1d"/><circle cx="20.4" cy="24" r="2.2" fill="#cbd6e4"/></svg>MavPulse</div>
@@ -66,7 +84,7 @@
             </div>
             <div class="view-body">
                 <div class="brief-card" id="brief-card" data-level="good">
-                    <div class="brief-headline" id="brief-headline">Loading live conditions…</div>
+                    <div class="brief-headline" id="brief-headline">Checking conditions…</div>
                     <ul class="brief-lines" id="brief-lines"></ul>
                 </div>
 
@@ -79,10 +97,10 @@
 
                 <h2 class="section-title">Weather</h2>
                 <div class="nws-alert-status" id="nws-alert-status" aria-live="polite">Checking the National Weather Service…</div>
-                <div id="nws-alert-list" class="nws-alert-list"></div>
+                <div id="nws-alert-list" class="nws-alert-list"><div class="skeleton short"></div></div>
 
                 <div class="weather-strip" id="weather-strip">
-                    <div class="weather-strip-icon" id="current-weather-icon" aria-hidden="true"></div>
+                    <div class="weather-strip-icon" id="current-weather-icon" aria-hidden="true"><svg class="i"><use href="#i-partly"/></svg></div>
                     <div class="weather-strip-main">
                         <div><strong id="current-temperature">--</strong>° <span id="current-condition">Loading weather</span></div>
                         <div class="weather-strip-sub" id="weather-sub">UTA campus · Open-Meteo</div>
@@ -95,7 +113,7 @@
 
                 <h2 class="section-title">City road work</h2>
                 <p class="section-hint">Barricaded work zones from the City of Arlington's permit data.</p>
-                <div id="roadwork-list" class="report-list"><p class="empty-alerts">Loading city data…</p></div>
+                <div id="roadwork-list" class="report-list"><div class="skeleton"></div><div class="skeleton short"></div></div>
 
                 <h2 class="section-title">Campus updates</h2>
                 <div id="update-list" class="report-list"></div>
@@ -231,6 +249,7 @@
     </main>
 
     <nav class="tab-bar" aria-label="Sections">
+        <span class="tab-glider" id="tab-glider" aria-hidden="true"></span>
         <button class="tab-item active" data-view="home" aria-current="page"><span class="tab-icon"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg></span><span class="tab-label">Home</span></button>
         <button class="tab-item" data-view="map"><span class="tab-icon"><svg class="i" aria-hidden="true"><use href="#i-map"/></svg></span><span class="tab-label">Map</span></button>
         <button class="tab-item tab-report" data-view="report"><span class="tab-icon"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></span><span class="tab-label">Report</span></button>
@@ -241,6 +260,7 @@
     <!-- ============ PROFILE / SETTINGS SHEET ============ -->
     <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
     <aside class="sheet" id="profile-sheet" hidden aria-label="Profile and settings">
+        <div class="sheet-grip" aria-hidden="true"></div>
         <div class="sheet-head">
             <h2>Profile &amp; settings</h2>
             <button class="icon-btn dark" id="close-profile" type="button" aria-label="Close"><svg class="i" aria-hidden="true"><use href="#i-close"/></svg></button>
@@ -292,7 +312,7 @@
         </div>
     </aside>
 
-    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden><span class="toast-icon" id="toast-icon"></span><span id="toast-text"></span></div>
 </div>
 </div>
 

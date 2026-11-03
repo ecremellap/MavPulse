@@ -3,7 +3,7 @@
  * shell open offline. Live data (weather, NWS, reports, map tiles) always
  * goes to the network; only the app's own files are cached.
  */
-const CACHE = "mavpulse-v7";
+const CACHE = "mavpulse-v8";
 const SHELL = [
   "./", "./index.html", "./style.css", "./script.js", "./logic.js", "./data.js", "./store.js", "./citydata.js",
   "./firebase-config.js", "./manifest.webmanifest", "./vendor/leaflet/leaflet.js", "./vendor/leaflet/leaflet.css",

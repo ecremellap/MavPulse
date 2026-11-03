@@ -41,26 +41,74 @@ document.addEventListener("DOMContentLoaded", async () => {
     const svg = (name, cls) => `<svg class="${cls || "i"}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
     function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
+    // Motion helpers. Everything respects the OS "reduce motion" setting.
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    function buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms || 12); } catch (e) { /* unsupported */ } }
+
     let toastTimer = null;
-    function toast(msg) {
+    function toast(msg, kind) {
         const t = $("toast");
-        t.textContent = msg; t.hidden = false;
-        clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
+        $("toast-text").textContent = msg;
+        $("toast-icon").innerHTML = svg(kind === "ok" ? "check" : kind === "warn" ? "alert" : "bell");
+        t.dataset.kind = kind || "info";
+        t.hidden = false;
+        t.classList.remove("show"); void t.offsetWidth; t.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { t.classList.remove("show"); setTimeout(() => { t.hidden = true; }, 250); }, 3200);
+    }
+
+    // Remember what was just tapped so a successful report can celebrate
+    // right on that button (check mark + floating "+10").
+    let lastTap = null;
+    document.addEventListener("pointerdown", e => { lastTap = e.target.closest("button, a"); }, true);
+    function celebrate(target, points) {
+        if (!target || !document.body.contains(target)) return;
+        buzz(18);
+        target.classList.remove("did-it"); void target.offsetWidth; target.classList.add("did-it");
+        if (reduceMotion || !points) return;
+        const r = target.getBoundingClientRect();
+        const host = document.querySelector(".phone-screen").getBoundingClientRect();
+        const f = el("span", "float-points", `+${points}`);
+        f.style.left = `${r.left - host.left + r.width / 2}px`;
+        f.style.top = `${r.top - host.top}px`;
+        document.querySelector(".phone-screen").appendChild(f);
+        setTimeout(() => f.remove(), 1000);
     }
 
     // ---------------- navigation ----------------
     const views = document.querySelectorAll(".app-view");
     const tabs = document.querySelectorAll(".tab-item");
+    const ORDER = ["home", "map", "report", "study", "transit"];
+    let currentView = "home";
+    function moveGlider(id) {
+        const tab = document.querySelector(`.tab-item[data-view="${id}"]`);
+        const g = $("tab-glider");
+        if (!tab || !g) return;
+        g.style.width = `${tab.offsetWidth - 24}px`;
+        g.style.transform = `translateX(${tab.offsetLeft + 12}px)`;
+        g.classList.toggle("report", id === "report");
+    }
     function switchView(id) {
-        views.forEach(v => v.classList.toggle("active", v.id === `view-${id}`));
+        if (id === currentView) { document.querySelector(".main-content").scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" }); return; }
+        const dir = ORDER.indexOf(id) > ORDER.indexOf(currentView) ? "fwd" : "back";
+        currentView = id;
+        views.forEach(v => {
+            const on = v.id === `view-${id}`;
+            v.classList.toggle("active", on);
+            v.classList.remove("enter-fwd", "enter-back");
+            if (on && !reduceMotion) { void v.offsetWidth; v.classList.add(`enter-${dir}`); }
+        });
         tabs.forEach(t => {
             const on = t.dataset.view === id;
             t.classList.toggle("active", on);
             if (on) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
         });
+        moveGlider(id);
+        buzz(6);
         document.querySelector(".main-content").scrollTop = 0;
         if (id === "map" && map) setTimeout(() => map.invalidateSize(), 120);
     }
+    window.addEventListener("resize", () => moveGlider(currentView));
     tabs.forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
     $("home-date").textContent = new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 
@@ -179,6 +227,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ======================================================================
     //  CROSSINGS (Home list + Report buttons + alerts)
     // ======================================================================
+    const prevCrossing = {};
     function crossingStates() {
         return D.CROSSINGS.map(c => ({ ...c, ...MP.crossingState(allReports(), c.id, now()) }));
     }
@@ -186,7 +235,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         const list = $("crossing-list");
         list.innerHTML = "";
         crossingStates().forEach(c => {
-            const row = el("div", `signal-row ${c.state}`);
+            const changed = prevCrossing[c.id] !== undefined && prevCrossing[c.id] !== c.state;
+            prevCrossing[c.id] = c.state;
+            const row = el("div", `signal-row ${c.state}${changed && !reduceMotion ? " changed" : ""}`);
             const lamp = el("span", "lamp"); lamp.setAttribute("aria-hidden", "true");
             const left = el("div", "crossing-left");
             left.appendChild(el("div", "crossing-name", c.name));
@@ -239,16 +290,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     async function submit(report, okMsg) {
         if (!MP.canReport(allReports(), state.uid, report.type, report.targetId, now())) {
-            toast("You just reported that. Give it 2 minutes so one person can't flood the feed.");
+            toast("You already reported this. You can report it again in 2 minutes.", "warn");
             return false;
         }
         try {
+            const tapped = lastTap;
             await store.addReport({ ...report, reporterId: state.uid, at: now() });
-            toast(okMsg + " +10 points");
+            celebrate(tapped, MP.RULES.POINTS_PER_REPORT);
+            toast(okMsg, "ok");
             return true;
         } catch (e) {
             console.error(e);
-            toast("Couldn't send that report. Check your connection and try again.");
+            toast("Report not sent. Check your connection and tap again.", "warn");
             return false;
         }
     }
@@ -324,12 +377,23 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
+    function emptyState(icon, text, actionLabel, onAction) {
+        const box = el("div", "empty-state");
+        const ic = el("span", "empty-icon"); ic.innerHTML = svg(icon);
+        box.append(ic, el("p", null, text));
+        if (actionLabel) {
+            const b = el("button", "pill-btn", actionLabel); b.type = "button";
+            b.addEventListener("click", onAction);
+            box.appendChild(b);
+        }
+        return box;
+    }
     function renderClosures() {
         const list = $("closure-list");
         const closures = MP.activeClosures(allReports(), now());
         drawClosureLayer(closures);
         list.innerHTML = "";
-        if (!closures.length) { list.appendChild(el("p", "empty-alerts", "No closures reported in the last 12 hours.")); return; }
+        if (!closures.length) { list.appendChild(emptyState("check", "No closures reported in the last 12 hours.", "Report a closure", () => switchView("report"))); return; }
         closures.forEach(c => {
             const card = el("article", "report-card");
             const kind = (D.CLOSURE_KINDS.find(k => k.id === c.kind) || {}).label || "Closure";
@@ -430,7 +494,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             const badge = el("span", "route-badge"); badge.style.background = r.color;
             sum.append(badge, el("span", "route-name", r.name), el("span", "route-status", st.label));
             card.appendChild(sum);
-            card.appendChild(el("div", "route-stops", r.stops.length ? r.stops.map(s => s.name).join(" → ") : "Evening route: stops listed in TripShot."));
+            if (r.stops.length) {
+                const line = el("ol", "route-line");
+                line.style.setProperty("--route", r.color);
+                r.stops.forEach(stop => line.appendChild(el("li", null, stop.name)));
+                card.appendChild(line);
+            } else {
+                card.appendChild(el("div", "route-stops", "Evening route. Stops are listed in TripShot."));
+            }
             list.appendChild(card);
         });
         $("transit-updated").textContent = `${running} of ${D.ROUTES.length} routes in service now · ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
@@ -440,6 +511,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ======================================================================
     //  WEATHER (Open-Meteo, campus by default) + NWS ALERTS (with map areas)
     // ======================================================================
+    function weatherIcon(code) {
+        if (code === 0 || code === 1) return "sun";
+        if (code === 2) return "partly";
+        if (code === 3) return "cloud";
+        if (code === 45 || code === 48) return "fog";
+        if (code >= 71 && code <= 77) return "snow";
+        if (code >= 95) return "storm";
+        if (code >= 51) return "rain";
+        return "partly";
+    }
     const WX = {
         0: ["Clear", "☀️"], 1: ["Mainly clear", "🌤️"], 2: ["Partly cloudy", "⛅"], 3: ["Overcast", "☁️"],
         45: ["Fog", "🌫️"], 48: ["Fog", "🌫️"], 51: ["Light drizzle", "🌦️"], 53: ["Drizzle", "🌦️"], 55: ["Drizzle", "🌧️"],
@@ -460,6 +541,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             const d = await res.json();
             const [cond, icon] = WX[d.current.weather_code] || ["Current conditions", ""];
             state.weather = { temp: d.current.temperature_2m, condition: cond, rainChance: d.daily.precipitation_probability_max[0] };
+            $("current-weather-icon").innerHTML = svg(weatherIcon(d.current.weather_code));
+            $("current-weather-icon").dataset.kind = weatherIcon(d.current.weather_code);
             $("current-temperature").textContent = Math.round(d.current.temperature_2m);
             $("current-condition").textContent = cond;
             $("weather-sub").textContent = `Feels ${Math.round(d.current.apparent_temperature)}° · H ${Math.round(d.daily.temperature_2m_max[0])}° L ${Math.round(d.daily.temperature_2m_min[0])}° · Wind ${Math.round(d.current.wind_speed_10m)} mph · Rain ${d.daily.precipitation_probability_max[0]}%`;
@@ -567,7 +650,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         const list = $("update-list");
         list.innerHTML = "";
         if (!state.updates.length) {
-            list.appendChild(el("p", "empty-alerts", state.mode === "shared" ? "No admin updates right now." : "Admin updates appear when the shared backend is connected."));
+            list.appendChild(emptyState("bell", state.mode === "shared" ? "No campus updates right now." : "Campus updates appear when the shared backend is connected."));
             return;
         }
         state.updates.forEach(u => {
@@ -596,6 +679,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             const top = el("div", "points-top");
             top.append(el("div", "points-num", String(s.points)), el("div", "points-level", `${s.level}${s.nextLevel ? ` · ${s.toNext} pts to ${s.nextLevel}` : ""}`));
             card.appendChild(top);
+            const LEVEL_MIN = { Newcomer: 0, Regular: 50, "Campus Scout": 150, "Pulse Legend": 400 };
+            const lo = LEVEL_MIN[s.level] || 0, hi = s.nextLevel ? LEVEL_MIN[s.nextLevel] : s.points || 1;
+            const bar = el("div", "points-bar"); const fillEl = el("span");
+            fillEl.style.width = `${Math.min(100, Math.round(((s.points - lo) / Math.max(1, hi - lo)) * 100))}%`;
+            bar.appendChild(fillEl); card.appendChild(bar);
             card.appendChild(el("div", "points-sub", `${s.reports} report${s.reports === 1 ? "" : "s"} · ${s.confirmed} backed up by another commuter (+5 each)`));
             card.appendChild(el("div", "points-sub", `Community today: ${today.length} report${today.length === 1 ? "" : "s"} from ${people} commuter${people === 1 ? "" : "s"}`));
         };
@@ -678,8 +766,27 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ======================================================================
     //  PROFILE SHEET + ADMIN
     // ======================================================================
-    function openSheet() { $("profile-sheet").hidden = false; $("sheet-backdrop").hidden = false; renderPoints(); }
-    function closeSheet() { $("profile-sheet").hidden = true; $("sheet-backdrop").hidden = true; }
+    function openSheet() {
+        const sh = $("profile-sheet"), bd = $("sheet-backdrop");
+        sh.hidden = false; bd.hidden = false; renderPoints();
+        requestAnimationFrame(() => { sh.classList.add("open"); bd.classList.add("open"); });
+    }
+    function closeSheet() {
+        const sh = $("profile-sheet"), bd = $("sheet-backdrop");
+        sh.classList.remove("open"); bd.classList.remove("open");
+        setTimeout(() => { sh.hidden = true; bd.hidden = true; }, reduceMotion ? 0 : 260);
+    }
+    // Swipe the sheet down to close it.
+    (() => {
+        const sh = $("profile-sheet"); let y0 = null;
+        sh.addEventListener("touchstart", e => { if (sh.querySelector(".sheet-body").scrollTop <= 0) y0 = e.touches[0].clientY; }, { passive: true });
+        sh.addEventListener("touchmove", e => { if (y0 === null) return; const dy = Math.max(0, e.touches[0].clientY - y0); sh.style.transform = `translateY(${dy}px)`; }, { passive: true });
+        sh.addEventListener("touchend", e => {
+            if (y0 === null) return;
+            const dy = e.changedTouches[0].clientY - y0; y0 = null; sh.style.transform = "";
+            if (dy > 90) closeSheet();
+        });
+    })();
     $("open-profile").addEventListener("click", openSheet);
     $("close-profile").addEventListener("click", closeSheet);
     $("sheet-backdrop").addEventListener("click", closeSheet);
@@ -742,7 +849,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 }));
             }
             list.innerHTML = "";
-            if (!state.roadWork.length) list.appendChild(el("p", "empty-alerts", "No city road work with barricades near campus right now."));
+            if (!state.roadWork.length) list.appendChild(emptyState("check", "No barricaded city road work near campus right now."));
             state.roadWork.slice(0, 6).forEach(w => {
                 const card = el("article", "report-card roadwork-card");
                 const meta = el("div", "weather-meta");
@@ -875,6 +982,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateMapFooter();
         if (state.myPos) updateHazardBanner(state.myPos);
     }
+
+    // Launch moment: the crossing lights flash, then the app settles in once.
+    const splash = $("splash");
+    setTimeout(() => {
+        splash.classList.add("done");
+        document.body.classList.add("launched");
+        moveGlider("home");
+        setTimeout(() => document.body.classList.add("settled"), 1200);
+        setTimeout(() => splash.remove(), 500);
+    }, reduceMotion ? 0 : 1100);
 
     // Static/first paint before the store connects.
     drawShuttleLayer();
