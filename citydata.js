@@ -18,15 +18,30 @@
     // Campus and the streets commuters use to reach it.
     const AREA = { xmin: -97.140, ymin: 32.715, xmax: -97.090, ymax: 32.745, spatialReference: { wkid: 4326 } };
 
+    // The City's server does not send CORS headers, so a normal fetch()
+    // from github.io is blocked. ArcGIS REST supports JSONP (callback=),
+    // which loads the same public JSON through a <script> tag instead.
+    let seq = 0;
+    function jsonp(url, timeoutMs) {
+        return new Promise((resolve, reject) => {
+            const cb = `__mpCity${Date.now()}_${seq++}`;
+            const script = document.createElement("script");
+            const cleanup = () => { delete root[cb]; script.remove(); clearTimeout(timer); };
+            const timer = setTimeout(() => { cleanup(); reject(new Error("City GIS timed out")); }, timeoutMs || 15000);
+            root[cb] = data => { cleanup(); resolve(data); };
+            script.onerror = () => { cleanup(); reject(new Error("City GIS unreachable")); };
+            script.src = `${url}&callback=${cb}`;
+            document.head.appendChild(script);
+        });
+    }
+
     async function query(path, params) {
         const p = new URLSearchParams({
             where: "1=1", geometry: JSON.stringify(AREA), geometryType: "esriGeometryEnvelope", inSR: "4326",
             spatialRel: "esriSpatialRelIntersects", outFields: "*", outSR: "4326", returnGeometry: "true", f: "json",
             ...params
         });
-        const res = await fetch(`${BASE}${path}/query?${p}`);
-        if (!res.ok) throw new Error(`City GIS returned ${res.status}`);
-        const data = await res.json();
+        const data = await jsonp(`${BASE}${path}/query?${p}`);
         if (data.error) throw new Error(data.error.message || "City GIS error");
         return data.features || [];
     }
