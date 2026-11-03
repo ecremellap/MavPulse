@@ -1205,3 +1205,6 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 @media (prefers-reduced-motion: reduce) {
     .signal-row.confirmed .lamp, .mk.crossing-blocked, .me-dot { animation: none; }
 }
+
+/* Muted basemap: data layers carry the color */
+.leaflet-tile-pane { filter: saturate(0.25) brightness(1.06) contrast(0.92); }
