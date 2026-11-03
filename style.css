@@ -1208,3 +1208,6 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 
 /* Muted basemap: data layers carry the color */
 .leaflet-tile-pane { filter: saturate(0.25) brightness(1.06) contrast(0.92); }
+
+.brand-mark { width: 26px; height: 26px; flex: 0 0 26px; }
+.app-brand { gap: 9px; }
