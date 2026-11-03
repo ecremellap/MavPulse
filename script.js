@@ -38,6 +38,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     function loadPref(k, dflt) { try { return localStorage.getItem(k) || dflt; } catch (e) { return dflt; } }
     function savePref(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
     function loadJSON(k, dflt) { try { return JSON.parse(localStorage.getItem(k)) || dflt; } catch (e) { return dflt; } }
+    const svg = (name, cls) => `<svg class="${cls || "i"}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
     function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
     let toastTimer = null;
@@ -70,8 +71,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     const layers = {};
     if (window.L && $("leaflet-map")) {
         map = L.map("leaflet-map", { zoomControl: true }).setView([32.7330, -97.1160], 15);
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+        // CARTO's light basemap keeps streets readable and lets our data stand out.
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+            maxZoom: 20, subdomains: "abcd",
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
         }).addTo(map);
         ["crossings", "closures", "alerts", "roadwork", "safety", "parking", "shuttles", "study", "rail", "me"].forEach(k => { layers[k] = L.layerGroup(); });
         layers.rail.addTo(map);
@@ -121,7 +124,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const st = MP.latestStatus(allReports(), "lot", lot.id, now(), MP.RULES.LOT_TTL_MS);
             const cls = st ? (st.status === "full" ? "lot-full" : "lot-open") : "parking";
             const lines = [lot.kind, st ? `${st.status === "full" ? "Reported FULL" : "Reported spaces open"} · ${MP.minutesAgo(st.at, now())}` : "No recent report"];
-            const a = el("a", "pop-link", "Live counts: UTA Parking Finder ↗"); a.href = D.LINKS.parkingFinder; a.target = "_blank"; a.rel = "noopener";
+            const a = el("a", "pop-link", "Live counts in UTA Parking Finder"); a.href = D.LINKS.parkingFinder; a.target = "_blank"; a.rel = "noopener";
             L.marker([lot.lat, lot.lng], { icon: dot(cls, "P") }).bindPopup(popupHTML(lot.name, lines, a)).addTo(layers.parking);
         });
     }
@@ -156,7 +159,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const cls = s.state === "clear" ? "crossing-clear" : "crossing-blocked";
             const lines = [s.state === "clear" ? "No train reported" : `${s.state === "confirmed" ? "Blocked, confirmed" : "Reported blocked"} · ${MP.minutesAgo(s.lastAt, now())}`];
             if (s.state !== "clear") lines.push(`Detour: ${c.detour}`);
-            const m = L.marker([c.lat, c.lng], { icon: dot(cls, "🚂"), zIndexOffset: s.state === "clear" ? 0 : 1000 })
+            const m = L.marker([c.lat, c.lng], { icon: dot(cls, svg("train", "mi")), zIndexOffset: s.state === "clear" ? 0 : 1000 })
                 .bindPopup(popupHTML(`${c.name} rail crossing`, lines)).addTo(layers.crossings);
             if (s.state !== "clear") m.bindTooltip(s.state === "confirmed" ? "BLOCKED" : "Reported", { permanent: true, direction: "top", className: "blocked-tip", offset: [0, -10] });
         });
@@ -182,18 +185,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         const list = $("crossing-list");
         list.innerHTML = "";
         crossingStates().forEach(c => {
-            const row = el("div", `crossing-row ${c.state}`);
+            const row = el("div", `signal-row ${c.state}`);
+            const lamp = el("span", "lamp"); lamp.setAttribute("aria-hidden", "true");
             const left = el("div", "crossing-left");
             left.appendChild(el("div", "crossing-name", c.name));
-            const sub = c.state === "clear" ? "Clear · no train reported"
-                : c.state === "confirmed" ? `Blocked · confirmed by ${c.reporters} people · ${MP.minutesAgo(c.lastAt, now())}`
-                : `Reported blocked by 1 person · ${MP.minutesAgo(c.lastAt, now())} · needs 1 more to confirm`;
+            const sub = c.state === "clear" ? "Clear"
+                : c.state === "confirmed" ? `Blocked, confirmed by ${c.reporters} · ${MP.minutesAgo(c.lastAt, now())}`
+                : `1 report · ${MP.minutesAgo(c.lastAt, now())} · needs one more`;
             left.appendChild(el("div", "crossing-sub", sub));
-            row.appendChild(left);
-            const btn = el("button", "pill-btn " + (c.state === "clear" ? "" : "ok"), c.state === "clear" ? "🚂 Train here" : "It's clear");
+            const btn = el("button", "row-btn " + (c.state === "clear" ? "" : "ok"), c.state === "clear" ? "Train here" : "It's clear");
             btn.type = "button";
+            btn.setAttribute("aria-label", `${c.state === "clear" ? "Report a train at" : "Mark clear:"} ${c.name}`);
             btn.addEventListener("click", () => reportCrossing(c.id, c.state === "clear" ? "blocked" : "clear"));
-            row.appendChild(btn);
+            row.append(lamp, left, btn);
             list.appendChild(row);
         });
 
@@ -453,9 +457,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             const res = await fetch(`https://api.open-meteo.com/v1/forecast?${p}`);
             if (!res.ok) throw new Error(res.status);
             const d = await res.json();
-            const [cond, icon] = WX[d.current.weather_code] || ["Current conditions", "🌡️"];
+            const [cond, icon] = WX[d.current.weather_code] || ["Current conditions", ""];
             state.weather = { temp: d.current.temperature_2m, condition: cond, rainChance: d.daily.precipitation_probability_max[0] };
-            $("current-weather-icon").textContent = icon;
             $("current-temperature").textContent = Math.round(d.current.temperature_2m);
             $("current-condition").textContent = cond;
             $("weather-sub").textContent = `Feels ${Math.round(d.current.apparent_temperature)}° · H ${Math.round(d.daily.temperature_2m_max[0])}° L ${Math.round(d.daily.temperature_2m_min[0])}° · Wind ${Math.round(d.current.wind_speed_10m)} mph · Rain ${d.daily.precipitation_probability_max[0]}%`;
@@ -545,7 +548,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         $("brief-headline").textContent = brief.headline;
         const ul = $("brief-lines");
         ul.innerHTML = "";
-        brief.lines.forEach(l => { const li = el("li"); li.append(el("span", "brief-icon", l.icon), el("span", null, l.text)); ul.appendChild(li); });
+        brief.lines.forEach(l => { const li = el("li"); const ic = el("span", "brief-icon"); ic.innerHTML = svg(l.icon); li.append(ic, el("span", null, l.text)); ul.appendChild(li); });
     }
 
     // ======================================================================
@@ -627,7 +630,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!MP.shouldNotify(state.notifyMode, event)) return;
         state.notified.add(event.key);
         savePref("mavpulse-notified", JSON.stringify([...state.notified].slice(-200)));
-        toast(`🔔 ${event.title}`);
+        toast(event.title);
         if (!("Notification" in window) || Notification.permission !== "granted") return;
         try {
             const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
@@ -780,7 +783,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             calls.forEach(f => {
                 if (!f.geometry) return;
                 const a = f.attributes;
-                L.marker([f.geometry.y, f.geometry.x], { icon: dot("police", "🚓") })
+                L.marker([f.geometry.y, f.geometry.x], { icon: dot("police", svg("police", "mi")) })
                     .bindPopup(popupHTML(`Active police call: ${(a.CallTypeDescription || "").toLowerCase()}`, [`${a.Location ? a.Location.trim() + " (block)" : ""}`, `Status: ${a.Status || "n/a"} · ${a.CallDate ? MP.minutesAgo(a.CallDate, now()) : ""}`]))
                     .addTo(layers.safety);
             });
@@ -790,7 +793,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             sum.byCategory.forEach(([name, n]) => { const c = el("span", "safety-chip", `${name} ${n}`); c.style.borderColor = CRIME_COLORS[name] || "#64748b"; chips.appendChild(c); });
             card.appendChild(chips);
             card.appendChild(el("p", "source-note", "Source: City of Arlington Police Department public data (crime updated nightly, calls every 15 min). Incidents handled by UTA Police on campus are not included. Sex offenses and juvenile cases are counted but never pinned on the map, to protect victims. For an emergency call 911."));
-            const a = el("a", "text-btn", "Search Arlington crime reports ↗"); a.href = D.LINKS.cityCrimeSearch; a.target = "_blank"; a.rel = "noopener";
+            const a = el("a", "text-btn", "Search Arlington crime reports"); a.href = D.LINKS.cityCrimeSearch; a.target = "_blank"; a.rel = "noopener";
             card.appendChild(a);
             updateMapFooter();
         } catch (e) {
@@ -817,11 +820,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!near.length) { banner.hidden = true; return; }
         banner.hidden = false;
         banner.innerHTML = "";
-        banner.appendChild(el("strong", null, `⚠️ ${near[0].meters} m from you: ${near[0].label}`));
+        banner.appendChild(el("strong", null, `${near[0].meters} m from you: ${near[0].label}`));
         if (near[0].tip) banner.appendChild(el("div", null, near[0].tip + "."));
         if (near.length > 1) banner.appendChild(el("div", null, `+${near.length - 1} more within 1 km`));
         const key = near[0].label;
-        if (key !== lastHazardKey) { lastHazardKey = key; toast(`⚠️ ${near[0].label} (${near[0].meters} m)`); }
+        if (key !== lastHazardKey) { lastHazardKey = key; toast(`${near[0].label}, ${near[0].meters} m away`); }
     }
     function onPosition(p) {
         const pos = { lat: p.coords.latitude, lng: p.coords.longitude };
@@ -841,16 +844,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (watchId !== null) {
             navigator.geolocation.clearWatch(watchId); watchId = null;
             layers.me.clearLayers(); meMarker = meCircle = null; state.myPos = null;
-            btn.setAttribute("aria-pressed", "false"); btn.textContent = "📍 Locate me"; $("hazard-banner").hidden = true;
+            btn.setAttribute("aria-pressed", "false"); btn.innerHTML = svg("locate") + "<span>Locate me</span>"; $("hazard-banner").hidden = true;
             return;
         }
         if (!navigator.geolocation) { toast("Location isn't available in this browser."); return; }
-        btn.setAttribute("aria-pressed", "true"); btn.textContent = "📍 Tracking… tap to stop";
+        btn.setAttribute("aria-pressed", "true"); btn.innerHTML = svg("locate") + "<span>Following you</span>";
         followMe = true;
         watchId = navigator.geolocation.watchPosition(onPosition, err => {
             toast(err.code === 1 ? "Location permission denied. Enable it in your browser settings." : "Couldn't get your location.");
             navigator.geolocation.clearWatch(watchId); watchId = null;
-            btn.setAttribute("aria-pressed", "false"); btn.textContent = "📍 Locate me";
+            btn.setAttribute("aria-pressed", "false"); btn.innerHTML = svg("locate") + "<span>Locate me</span>";
         }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
     });
     if (map) map.on("dragstart", () => { followMe = false; });

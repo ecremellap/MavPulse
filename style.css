@@ -1014,3 +1014,194 @@ body.picking #leaflet-map { cursor: crosshair; outline: 3px solid var(--color-or
 .legend-swatch.roadwork { width: 14px; height: 4px; background: #c2410c; }
 .legend-swatch.rail { width: 14px; height: 0; border-top: 3px dotted #374151; }
 .map-canvas { position: relative; }
+
+/* =====================================================================
+   THEME v3 — UTA identity, road-sign type, signal board
+   ===================================================================== */
+:root {
+    --mav-blue: #0057a8;
+    --mav-blue-deep: #00407c;
+    --blaze: #f26b1d;
+    --blaze-deep: #c94f0c;
+    --signal-green: #1e8e5a;
+    --amber: #b7791f;
+    --ink: #0f1e33;
+    --ink-2: #4a5a70;
+    --paper: #f4f6f9;
+    --line: #dde3ea;
+    --card: #ffffff;
+    --bg-dark-header: var(--mav-blue);
+    --bg-light-canvas: var(--paper);
+    --color-orange-alert: var(--blaze);
+    --color-text-dark: var(--ink);
+    --color-text-muted: var(--ink-2);
+    --color-border: var(--line);
+}
+* { font-family: "Overpass", -apple-system, "Segoe UI", Roboto, sans-serif; }
+body { background: #dfe6ee; color: var(--ink); }
+.phone-container { background: #0f1e33; border-color: #2c3e57; }
+.phone-screen { background: var(--paper); }
+
+/* Icons */
+.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+.i.sm { width: 15px; height: 15px; }
+.mi { width: 12px; height: 12px; fill: none; stroke: #fff; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Header */
+.app-bar { background: var(--mav-blue); padding-bottom: 2px; }
+.app-brand { font-size: 17px; font-weight: 800; letter-spacing: 0; }
+.brand-dot { background: var(--blaze); box-shadow: none; width: 10px; height: 10px; }
+.sync-pill { background: rgba(255,255,255,0.14); color: #dce8f6; font-weight: 600; }
+.sync-pill.shared { background: rgba(30,142,90,0.9); color: #fff; }
+.icon-btn { background: rgba(255,255,255,0.14); display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn .i { width: 18px; height: 18px; }
+.icon-btn.dark { background: #e6ebf1; color: var(--ink); }
+.icon-btn.light { background: #eef3f9; color: var(--mav-blue); width: 36px; height: 36px; }
+.view-header { background: var(--mav-blue); padding: 4px 16px 22px; }
+.view-tagline { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; color: #bcd3ec; margin-bottom: 2px; }
+.view-title { font-size: 28px; font-weight: 800; letter-spacing: -0.3px; line-height: 1.1; }
+.view-body { padding: 16px; }
+
+/* Section headings */
+.section-title { font-size: 17px; font-weight: 800; color: var(--ink); margin: 26px 0 4px; letter-spacing: -0.1px; }
+.section-hint { font-size: 13px; line-height: 1.45; color: var(--ink-2); margin: 0 0 12px; }
+.section-divider { text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 800; color: var(--ink); }
+
+/* Brief: the sign at the top */
+.brief-card { margin-top: -14px; border-radius: 14px; padding: 16px 16px 14px; box-shadow: 0 6px 18px rgba(15,30,51,0.14); background: var(--signal-green); }
+.brief-card[data-level="warn"] { background: var(--amber); }
+.brief-card[data-level="bad"] { background: var(--blaze); }
+.brief-headline { font-size: 20px; font-weight: 800; margin-bottom: 10px; line-height: 1.2; }
+.brief-lines { gap: 7px; }
+.brief-lines li { font-size: 14px; line-height: 1.35; align-items: flex-start; }
+.brief-icon { width: 20px; flex-basis: 20px; padding-top: 1px; opacity: 0.95; }
+.brief-icon .i { width: 17px; height: 17px; }
+
+/* Signal board (rail crossings) */
+.signal-board { background: var(--card); border-radius: 14px; border: 1px solid var(--line); overflow: hidden; }
+.signal-row { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border-bottom: 1px solid var(--line); }
+.signal-row:last-child { border-bottom: none; }
+.lamp { width: 14px; height: 14px; border-radius: 50%; background: var(--signal-green); box-shadow: 0 0 0 4px rgba(30,142,90,0.15); }
+.signal-row.reported .lamp { background: var(--amber); box-shadow: 0 0 0 4px rgba(183,121,31,0.2); }
+.signal-row.confirmed { background: #fff4ec; }
+.signal-row.confirmed .lamp { background: var(--blaze); animation: lampblink 1s steps(2, start) infinite; box-shadow: 0 0 10px 2px rgba(242,107,29,0.6); }
+@keyframes lampblink { to { opacity: 0.25; } }
+.crossing-name { font-size: 15.5px; font-weight: 700; color: var(--ink); }
+.crossing-sub { font-size: 12.5px; color: var(--ink-2); margin-top: 1px; }
+.signal-row.confirmed .crossing-sub { color: var(--blaze-deep); font-weight: 600; }
+.row-btn { border: 1.5px solid var(--line); background: #fff; color: var(--ink); border-radius: 10px; padding: 9px 12px; font-size: 13px; font-weight: 700; min-height: 40px; cursor: pointer; white-space: nowrap; }
+.row-btn:hover { border-color: var(--blaze); color: var(--blaze-deep); }
+.row-btn.ok { background: var(--signal-green); border-color: var(--signal-green); color: #fff; }
+
+/* Alert cards */
+.orange-card { background: var(--blaze); border-radius: 14px; padding: 16px; }
+.orange-card.unconfirmed { background: var(--amber); }
+.orange-card.mavalert-card { background: #a3161b; }
+.orange-card h3 { font-size: 20px; font-weight: 800; }
+.orange-card p { font-size: 13.5px; line-height: 1.45; }
+.card-badge { text-transform: none; letter-spacing: 0; font-size: 12.5px; font-weight: 700; }
+.btn-dark { background: var(--ink); border-radius: 10px; font-size: 14px; min-height: 44px; }
+.btn-outline { border-color: rgba(255,255,255,0.6); border-radius: 10px; font-size: 14px; font-weight: 700; min-height: 44px; }
+
+/* Cards and lists */
+.weather-card, .report-card, .nws-alert-card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: none; }
+.weather-meta { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.report-card h4, .weather-card h4 { font-size: 15px; font-weight: 700; color: var(--ink); }
+.report-card p, .weather-card p { font-size: 13px; color: var(--ink-2); line-height: 1.45; }
+.roadwork-card { border-left: 4px solid var(--blaze); }
+.admin-update { border-left: 4px solid var(--mav-blue); }
+.empty-alerts { font-size: 13px; color: var(--ink-2); padding: 4px 0; }
+.nws-alert-status { font-size: 13px; color: var(--ink-2); margin-bottom: 8px; }
+.weather-strip { border-radius: 12px; border: 1px solid var(--line); padding: 12px 12px 12px 14px; margin-top: 0; }
+.weather-strip-icon { display: none; }
+.weather-strip-main { font-size: 14px; }
+.weather-strip-main strong { font-size: 26px; font-weight: 800; }
+.weather-strip-sub { font-size: 12px; }
+
+/* Buttons */
+.pill-btn { border-radius: 10px; font-size: 13px; min-height: 40px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.pill-btn.danger { background: var(--blaze); border-color: var(--blaze); }
+.pill-btn.ok { background: var(--signal-green); border-color: var(--signal-green); }
+.primary-btn { background: var(--blaze); border-radius: 12px; font-size: 16px; min-height: 52px; }
+.primary-btn:active, .big-btn:active, .row-btn:active { transform: scale(0.98); }
+.small-btn { background: var(--mav-blue); border-radius: 10px; min-height: 40px; font-size: 13px; }
+.text-btn { color: var(--mav-blue); font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px; }
+button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #7fb2e5; outline-offset: 2px; }
+
+/* Report tab */
+.safety-note { display: flex; gap: 10px; align-items: center; background: #fff6e0; color: #6b4a00; border-radius: 12px; font-size: 13px; }
+.report-block { border-radius: 14px; padding: 16px; }
+.report-block h3 { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 800; }
+.report-block h3 .i { color: var(--mav-blue); }
+.big-btn { border-radius: 12px; min-height: 68px; border-color: var(--line); background: #f7f9fc; }
+.big-btn-title { font-size: 16px; }
+.big-btn-sub { font-size: 12px; }
+.big-btn.is-blocked { border-color: var(--blaze); background: #fff1e8; }
+.chip { border-radius: 10px; font-size: 13.5px; min-height: 42px; }
+.chip.on { background: var(--mav-blue); border-color: var(--mav-blue); }
+.big-select { border-radius: 10px; font-size: 16px; }
+.points-card { background: var(--mav-blue-deep); border-radius: 14px; }
+.points-num { color: #ffd2b5; }
+
+/* Study */
+.study-card { border-radius: 12px; border: 1px solid var(--line); box-shadow: none; padding: 14px; margin-bottom: 10px; cursor: default; }
+.study-card.has-live-report { box-shadow: inset 4px 0 0 var(--signal-green); }
+.study-intro { font-size: 13px; color: var(--ink-2); padding: 0 16px 8px; line-height: 1.45; }
+.card-title-main { font-size: 16px; }
+.study-status { font-size: 13px; }
+.study-report-btn { border-radius: 10px; min-height: 40px; font-size: 13px; }
+
+/* Map */
+.filter-bar { padding: 14px 16px 10px; gap: 8px; }
+.filter-chip { border-radius: 10px; font-size: 13px; font-weight: 700; padding: 8px 12px; min-height: 38px; }
+.filter-chip.active { background: var(--mav-blue); border-color: var(--mav-blue); color: #fff; }
+.map-canvas { border-radius: 14px; border-color: var(--line); }
+.locate-btn { display: inline-flex; align-items: center; gap: 6px; color: var(--mav-blue); border-radius: 10px; font-size: 13.5px; }
+.locate-btn[aria-pressed="true"] { background: var(--mav-blue); }
+.hazard-banner { background: var(--blaze); border-radius: 12px; font-size: 13.5px; }
+.map-footer-text { font-size: 12.5px; }
+.map-legend { font-size: 12px; gap: 8px 14px; }
+.mk { width: 24px; height: 24px; }
+.mk.crossing-clear { background: var(--signal-green); }
+.mk.crossing-blocked { background: var(--blaze); }
+.mk.closures { background: var(--blaze-deep); }
+.mk.parking { background: var(--mav-blue); }
+.mk.shuttles { background: #3b82f6; }
+.mk.police { background: #1e3a8a; }
+.legend-dot.crossing-clear { background: var(--signal-green); }
+.legend-dot.parking { background: var(--mav-blue); }
+.leaflet-container { font-family: "Overpass", sans-serif; }
+.leaflet-popup-content-wrapper { border-radius: 12px; }
+.pop strong { font-size: 14px; }
+.pop div { font-size: 12.5px; color: var(--ink-2); }
+
+/* Shuttles */
+.tripshot-card { background: var(--mav-blue); border-radius: 14px; }
+.tripshot-card .i { width: 22px; height: 22px; }
+.route-card { border-radius: 12px; }
+.route-name { font-size: 15px; }
+.route-status { font-size: 12.5px; }
+.route-card.running .route-status { color: var(--signal-green); }
+
+/* Tab bar: light, blue active, orange Report */
+.tab-bar { background: #fff; border-top: 1px solid var(--line); min-height: 62px; padding-top: 4px; }
+.tab-item { color: #6b7a8f; gap: 2px; }
+.tab-item .tab-icon .i { width: 22px; height: 22px; }
+.tab-label { font-size: 11px; font-weight: 700; }
+.tab-item.active { color: var(--mav-blue); }
+.tab-item.tab-report .tab-icon { background: var(--blaze); width: 40px; height: 40px; border-radius: 12px; margin-top: -14px; box-shadow: 0 4px 12px rgba(242,107,29,0.4); color: #fff; }
+.tab-item.tab-report .tab-icon .i { width: 22px; height: 22px; stroke-width: 2.6; }
+.tab-item.tab-report.active .tab-label { color: var(--blaze-deep); }
+
+/* Sheet, toast */
+.sheet { background: var(--paper); }
+.sheet-head h2 { font-size: 20px; font-weight: 800; }
+.sheet-body h3 { font-size: 15px; font-weight: 800; }
+.seg button.on { color: var(--mav-blue); }
+.toast { background: var(--ink); border-radius: 12px; font-size: 14px; }
+.emergency-card { border-color: #f3c6c6; border-radius: 14px; }
+.emergency-title { font-size: 16px; color: #a3161b; }
+
+@media (prefers-reduced-motion: reduce) {
+    .signal-row.confirmed .lamp, .mk.crossing-blocked, .me-dot { animation: none; }
+}

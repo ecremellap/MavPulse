@@ -218,34 +218,34 @@
         const { weather, alerts, crossings, closures, routesRunning, roadWork, mavAlerts, now } = input;
         let level = "good";
         if (weather) {
-            lines.push({ icon: "🌡️", text: `${Math.round(weather.temp)}°F, ${weather.condition.toLowerCase()} · ${weather.rainChance}% chance of rain` });
+            lines.push({ icon: "temp", text: `${Math.round(weather.temp)}°F, ${weather.condition.toLowerCase()} · ${weather.rainChance}% chance of rain` });
         }
         if (mavAlerts && mavAlerts.length) {
-            lines.unshift({ icon: "🚨", text: `UTA MavAlert: ${mavAlerts[0].title}` });
+            lines.unshift({ icon: "siren", text: `UTA MavAlert: ${mavAlerts[0].title}` });
             level = "bad";
         }
         if (alerts && alerts.length) {
-            lines.push({ icon: "⚠️", text: `${alerts[0].event}${alerts.length > 1 ? ` (+${alerts.length - 1} more)` : ""}` });
+            lines.push({ icon: "alert", text: `${alerts[0].event}${alerts.length > 1 ? ` (+${alerts.length - 1} more)` : ""}` });
             if (level !== "bad") level = "warn";
         }
         const blocked = (crossings || []).filter(c => c.state !== "clear");
         if (blocked.length) {
             blocked.forEach(c => lines.push({
-                icon: "🚂",
+                icon: "train",
                 text: `${c.name} crossing ${c.state === "confirmed" ? "blocked (confirmed)" : "reported blocked"} · ${minutesAgo(c.lastAt, now)}`
             }));
             level = "bad";
         } else {
-            lines.push({ icon: "🚂", text: "No blocked rail crossings reported" });
+            lines.push({ icon: "train", text: "No blocked rail crossings reported" });
         }
         const n = (closures || []).length;
-        lines.push({ icon: "🚧", text: n ? `${n} closure${n === 1 ? "" : "s"} reported near campus` : "No closures reported" });
+        lines.push({ icon: "cone", text: n ? `${n} closure${n === 1 ? "" : "s"} reported near campus` : "No closures reported" });
         if (n && level === "good") level = "warn";
         if (typeof roadWork === "number" && roadWork > 0) {
-            lines.push({ icon: "🏗️", text: `${roadWork} active city road-work site${roadWork === 1 ? "" : "s"} near campus (official)` });
+            lines.push({ icon: "cone", text: `${roadWork} active city road-work site${roadWork === 1 ? "" : "s"} near campus (official)` });
         }
         if (typeof routesRunning === "number") {
-            lines.push({ icon: "🚌", text: routesRunning ? `${routesRunning} MavMover route${routesRunning === 1 ? "" : "s"} running now` : "MavMover not running right now" });
+            lines.push({ icon: "bus", text: routesRunning ? `${routesRunning} MavMover route${routesRunning === 1 ? "" : "s"} running now` : "MavMover not running right now" });
         }
         const headline = level === "bad" ? "Heads up before you leave" : level === "warn" ? "Mostly clear, check the details" : "All clear for your commute";
         return { level, headline, lines };

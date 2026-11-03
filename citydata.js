@@ -51,7 +51,9 @@
     const CityData = {
         roadWork() {
             return query("OpenData/OD_Transportation/MapServer/9", {
-                where: "Status = 'Issued' AND BarricadeInstall IS NOT NULL",
+                // Keep the server-side filter simple (compound filters fail over
+                // JSONP on this server); logic.activeRoadWork does the rest.
+                where: `BarricadeRemove >= DATE '${sqlDate(Date.now())}'`,
                 outFields: "Permit,Status,Sub,ScopeOfWork,ProjectEnd,BarricadeInstall,BarricadeRemove,Segment",
                 resultRecordCount: "1000"
             });
