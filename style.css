@@ -1439,3 +1439,16 @@ button:active, .tripshot-card:active, a.pill-btn:active { transform: scale(0.96)
 .safety-chip { display: inline-flex; align-items: center; gap: 2px; }
 .crime-mk.sm { width: 16px; height: 16px; border-radius: 5px; border-width: 1.5px; box-shadow: none; }
 .crime-mk.sm .mi { width: 9px; height: 9px; }
+
+/* ---------- Shuttle cards: live buses always visible, stops fold away ---------- */
+.route-head { display: flex; align-items: center; gap: 10px; padding: 2px 0; }
+.route-more { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+.route-more summary { list-style: none; cursor: pointer; font-size: 12.5px; font-weight: 700; color: var(--mav-blue); display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; }
+.route-more summary::-webkit-details-marker { display: none; }
+.route-more summary::after { content: ""; width: 6px; height: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); transition: transform .25s var(--ease-out); margin-top: -3px; }
+.route-more[open] summary::after { transform: rotate(225deg); margin-top: 3px; }
+.route-more[open] .route-line li { animation: rise 0.3s var(--ease-out) both; }
+.route-line li.bus-next { font-weight: 800; }
+.route-line li.bus-next::before { background: var(--route, #999); }
+.stop-bus { display: block; font-size: 11.5px; font-weight: 700; color: var(--signal-green); }
+.route-card .bus-row:first-of-type { padding-top: 8px; }

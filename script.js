@@ -296,7 +296,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             seenIds.add(bus.id);
             const lines = [
                 bus.nextStop ? (bus.etaMin === 0 ? `${bus.nextStop}` : `Next: ${bus.nextStop}${bus.etaMin !== null ? ` in ${bus.etaMin} min` : ""}`) : "In service",
-                bus.riders !== null ? `${bus.riders}${bus.capacity ? ` of ${bus.capacity}` : ""} riders on board` : "",
                 bus.delayed ? "Running behind schedule" : "", bus.stale ? "Position may be out of date" : ""
             ].filter(Boolean);
             const pop = popupHTML(`${r.name} · ${bus.name}`, lines);
@@ -671,6 +670,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     //  SHUTTLES (real MavMover schedule + TripShot link)
     // ======================================================================
     $("tripshot-link").href = D.LINKS.tripshot;
+    // Rider counts are not shown: TripShot's passenger-counter field reads 0
+    // on every bus, so it can't be trusted and we don't display it.
     function renderRoutes() {
         const list = $("route-list");
         const openIds = new Set([...list.querySelectorAll("details[open]")].map(x => x.dataset.route));
@@ -683,10 +684,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             const buses = live ? live.buses : [];
             liveBuses += buses.length;
             if (st.running || buses.length) running += 1;
-            const card = el("details", "route-card" + (st.running || buses.length ? " running" : ""));
-            card.dataset.route = r.id;
-            if (openIds.has(r.id)) card.open = true;
-            const sum = el("summary");
+            // Live buses (where each one is) always show; the stop list folds away.
+            const card = el("div", "route-card" + (st.running || buses.length ? " running" : ""));
+            const sum = el("div", "route-head");
             const badge = el("span", "route-badge"); badge.style.background = (live && live.color) || r.color;
             const status = buses.length ? `${buses.length} bus${buses.length === 1 ? "" : "es"} live` : st.label;
             const statusEl = el("span", "route-status" + (buses.length ? " live" : ""), status);
@@ -696,8 +696,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const row = el("div", "bus-row");
                 const ic = el("span", "bus-chip"); ic.style.setProperty("--route", (live && live.color) || r.color); ic.innerHTML = svg("bus", "mi");
                 const txt = el("div", "bus-text");
-                txt.appendChild(el("strong", null, bus.nextStop ? (bus.etaMin === 0 ? bus.nextStop : `${bus.nextStop}${bus.etaMin !== null ? ` · ${bus.etaMin === 0 ? "now" : bus.etaMin + " min"}` : ""}`) : bus.name));
-                txt.appendChild(el("span", null, [bus.name, bus.riders !== null ? `${bus.riders}${bus.capacity ? "/" + bus.capacity : ""} riders` : "", bus.delayed ? "running late" : ""].filter(Boolean).join(" · ")));
+                txt.appendChild(el("strong", null, bus.nextStop ? (bus.etaMin === 0 ? `At ${bus.nextStop}` : `${bus.nextStop}${bus.etaMin !== null ? ` · ${bus.etaMin === 0 ? "now" : bus.etaMin + " min"}` : ""}`) : bus.name));
+                txt.appendChild(el("span", null, [bus.name, bus.delayed ? "running late" : ""].filter(Boolean).join(" · ")));
                 const go = el("button", "pill-btn", "Map"); go.type = "button";
                 go.addEventListener("click", () => {
                     if (!map.hasLayer(layers.shuttles)) document.querySelector('.filter-chip[data-layer="shuttles"]').click();
@@ -706,12 +706,23 @@ document.addEventListener("DOMContentLoaded", async () => {
                 row.append(ic, txt, go);
                 card.appendChild(row);
             });
+            if (!buses.length && st.running && state.live.ok) card.appendChild(el("div", "route-stops", "No bus reporting its position right now."));
             const stops = live && live.stops.length ? live.stops : r.stops;
             if (stops.length) {
+                const more = el("details", "route-more");
+                more.dataset.route = r.id;
+                if (openIds.has(r.id)) more.open = true;
+                more.appendChild(el("summary", null, `${stops.length} stops`));
                 const line = el("ol", "route-line");
                 line.style.setProperty("--route", (live && live.color) || r.color);
-                stops.forEach(stop => line.appendChild(el("li", null, stop.name)));
-                card.appendChild(line);
+                stops.forEach(stop => {
+                    const coming = buses.filter(b => b.nextStop === stop.name);
+                    const li = el("li", coming.length ? "bus-next" : null, stop.name);
+                    if (coming.length) li.appendChild(el("span", "stop-bus", coming.map(b => `${b.name}${b.etaMin ? ` · ${b.etaMin} min` : " · arriving"}`).join(", ")));
+                    line.appendChild(li);
+                });
+                more.appendChild(line);
+                card.appendChild(more);
             } else {
                 card.appendChild(el("div", "route-stops", "Evening route. Stops are listed in TripShot."));
             }
