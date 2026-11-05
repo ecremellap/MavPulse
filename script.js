@@ -696,7 +696,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const row = el("div", "bus-row");
                 const ic = el("span", "bus-chip"); ic.style.setProperty("--route", (live && live.color) || r.color); ic.innerHTML = svg("bus", "mi");
                 const txt = el("div", "bus-text");
-                txt.appendChild(el("strong", null, bus.nextStop ? (bus.etaMin === 0 ? `At ${bus.nextStop}` : `${bus.nextStop}${bus.etaMin !== null ? ` · ${bus.etaMin === 0 ? "now" : bus.etaMin + " min"}` : ""}`) : bus.name));
+                txt.appendChild(el("strong", null, bus.nextStop ? (bus.etaMin === 0 ? bus.nextStop : `${bus.nextStop}${bus.etaMin !== null ? ` · ${bus.etaMin === 0 ? "now" : bus.etaMin + " min"}` : ""}`) : bus.name));
                 txt.appendChild(el("span", null, [bus.name, bus.delayed ? "running late" : ""].filter(Boolean).join(" · ")));
                 const go = el("button", "pill-btn", "Map"); go.type = "button";
                 go.addEventListener("click", () => {
@@ -716,9 +716,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const line = el("ol", "route-line");
                 line.style.setProperty("--route", (live && live.color) || r.color);
                 stops.forEach(stop => {
-                    const coming = buses.filter(b => b.nextStop === stop.name);
+                    const coming = buses.filter(b => (b.nextStop || "").replace(/^At /, "") === stop.name);
                     const li = el("li", coming.length ? "bus-next" : null, stop.name);
-                    if (coming.length) li.appendChild(el("span", "stop-bus", coming.map(b => `${b.name}${b.etaMin ? ` · ${b.etaMin} min` : " · arriving"}`).join(", ")));
+                    if (coming.length) li.appendChild(el("span", "stop-bus", coming.map(b => `${b.name}${/^At /.test(b.nextStop) ? " · at the stop" : b.etaMin ? ` · ${b.etaMin} min` : " · arriving"}`).join(", ")));
                     line.appendChild(li);
                 });
                 more.appendChild(line);
