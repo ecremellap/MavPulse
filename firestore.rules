@@ -4,6 +4,7 @@ rules_version = '2';
 // - Only signed-in users (anonymous accounts are created automatically)
 //   can create reports, only as themselves, only with the allowed shape.
 // - Nobody can edit a report; the reporter or an admin can delete it.
+// - Leaderboard profiles: written only by their owner with a verified UTA email.
 // - Admins are users with a document at /admins/{uid}. Only the team can
 //   create those (Firebase console), so nobody can make themselves admin.
 service cloud.firestore {
@@ -42,6 +43,23 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['title','body','at','author','kind']);
       allow update: if false;
       allow delete: if isAdmin();
+    }
+    // Leaderboard names. Only the owner can write their own profile, and only
+    // after verifying a UTA email (@mavs.uta.edu or @uta.edu).
+    function verifiedUta() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower().matches('.*@(mavs[.])?uta[.]edu');
+    }
+    match /profiles/{uid} {
+      allow read: if true;
+      allow create, update: if verifiedUta() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name','show','at'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 20
+        && request.resource.data.show is bool
+        && request.resource.data.at is int;
+      allow delete: if request.auth != null && request.auth.uid == uid;
     }
     match /admins/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;

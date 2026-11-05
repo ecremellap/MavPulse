@@ -19,6 +19,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ---------------- app state ----------------
     const state = {
         reports: [],          // from the store
+        weekReports: null,    // last 7 days (shared mode), for points + leaderboard
+        profiles: {},         // leaderboard names (verified UTA accounts)
         simReports: [],       // test-mode only, never leave this device
         updates: [],
         weather: null,
@@ -891,7 +893,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     //  POINTS / MOTIVATION
     // ======================================================================
     function renderPoints() {
-        const s = MP.contributorStats(state.reports, state.uid);
+        const s = MP.contributorStats(state.weekReports || state.reports, state.uid);
+        const board = MP.weeklyLeaderboard(state.weekReports || [], state.profiles, now());
+        const mine = board.find(r => r.uid === state.uid);
         const today = MP.activeReports(state.reports, now(), 24 * 60 * MIN);
         const people = new Set(today.map(r => r.reporterId)).size;
         const html = card => {
@@ -906,10 +910,120 @@ document.addEventListener("DOMContentLoaded", async () => {
             bar.appendChild(fillEl); card.appendChild(bar);
             card.appendChild(el("div", "points-sub", `${s.reports} report${s.reports === 1 ? "" : "s"} · ${s.confirmed} backed up by another commuter (+5 each)`));
             card.appendChild(el("div", "points-sub", `Community today: ${today.length} report${today.length === 1 ? "" : "s"} from ${people} commuter${people === 1 ? "" : "s"}`));
+            if (mine) card.appendChild(el("div", "points-sub rank", `#${mine.rank} on this week's leaderboard`));
+            else if (state.mode === "shared" && !(store && store.account)) card.appendChild(el("div", "points-sub rank", "Sign in with your UTA email under Profile to join the weekly leaderboard"));
         };
         html($("points-card"));
         html($("profile-points"));
+        renderLeaderboard(board);
     }
+
+    // ======================================================================
+    //  WEEKLY LEADERBOARD + OPTIONAL UTA SIGN-IN
+    // ======================================================================
+    function renderLeaderboard(board) {
+        const list = $("leaderboard");
+        if (!list) return;
+        list.innerHTML = "";
+        if (state.mode !== "shared") {
+            list.appendChild(el("li", "lb-empty", "The leaderboard appears when the shared backend is connected."));
+            return;
+        }
+        if (!board.length) {
+            list.appendChild(el("li", "lb-empty", "Nobody on the board yet this week. Report something and sign in with your UTA email to be first."));
+            return;
+        }
+        const row = r => {
+            const li = el("li", `top${r.rank}${r.uid === state.uid ? " me" : ""}`);
+            const name = el("div", "lb-name", r.uid === state.uid ? `${r.name} (you)` : r.name);
+            name.appendChild(el("small", null, `${r.level} · ${r.reports} report${r.reports === 1 ? "" : "s"}`));
+            li.append(el("span", "lb-rank", String(r.rank)), name, el("span", "lb-pts", `${r.points} pts`));
+            return li;
+        };
+        board.slice(0, 10).forEach(r => list.appendChild(row(r)));
+        const meIdx = board.findIndex(r => r.uid === state.uid);
+        if (meIdx >= 10) { list.appendChild(el("li", "gap", "· · ·")); list.appendChild(row(board[meIdx])); }
+    }
+
+    const PENDING_NAME = "mavpulse-pending-name";
+    function pendingName(v) {
+        try { if (v === undefined) return localStorage.getItem(PENDING_NAME); if (v === null) localStorage.removeItem(PENDING_NAME); else localStorage.setItem(PENDING_NAME, v); }
+        catch (e) { return null; }
+    }
+    function renderAccount() {
+        const acct = store && store.account;
+        const shared = state.mode === "shared";
+        $("account-card").hidden = !shared;
+        $("acct-anon").hidden = !!acct;
+        $("acct-verify").hidden = !(acct && !acct.verified);
+        $("acct-done").hidden = !(acct && acct.verified);
+        $("acct-signout").hidden = !acct;
+        if (acct && !acct.verified) $("acct-verify-email").textContent = acct.email;
+        if (acct && acct.verified) {
+            const p = state.profiles[state.uid];
+            $("acct-who").textContent = (p && p.name ? p.name + " · " : "") + acct.email;
+            if (document.activeElement !== $("profile-name")) $("profile-name").value = (p && p.name) || pendingName() || "";
+            $("profile-show").checked = !p || p.show !== false;
+        }
+    }
+    async function afterVerified() {
+        const name = pendingName();
+        if (name && !state.profiles[state.uid]) {
+            try { await store.saveProfile({ name, show: true }); pendingName(null); } catch (e) { /* user can save by hand */ }
+        }
+    }
+    let acctAction = "signup";
+    document.querySelectorAll("#acct-form [data-act]").forEach(b => b.addEventListener("click", () => { acctAction = b.dataset.act; }));
+    $("acct-form").addEventListener("submit", async e => {
+        e.preventDefault();
+        const email = $("acct-email").value.trim(), pass = $("acct-pass").value;
+        const name = MP.cleanDisplayName($("acct-name").value);
+        if (!MP.isUtaEmail(email)) { $("acct-msg").textContent = "Use your @mavs.uta.edu or @uta.edu email."; return; }
+        if (acctAction === "signup" && !name) { $("acct-msg").textContent = "Add your first name for the leaderboard."; return; }
+        $("acct-msg").textContent = acctAction === "signup" ? "Creating your account…" : "Signing in…";
+        try {
+            if (acctAction === "signup") {
+                pendingName(name);
+                await store.utaSignUp(email, pass);
+                $("acct-msg").textContent = "Almost there: check your UTA inbox for the link.";
+            } else {
+                await store.utaSignIn(email, pass);
+                if (name) pendingName(name);
+                if (store.account && store.account.verified) await afterVerified();
+                $("acct-msg").textContent = store.account && store.account.verified ? "Signed in. Your points follow you." : "Signed in. Verify your email to join the board.";
+            }
+            $("acct-pass").value = "";
+            state.uid = store.uid;
+        } catch (err) { $("acct-msg").textContent = err.message || "Sign-in failed."; }
+        renderAccount(); renderAdmin(); renderAll();
+    });
+    $("acct-check").addEventListener("click", async () => {
+        $("acct-msg").textContent = "Checking…";
+        try {
+            const ok = await store.checkVerified();
+            if (ok) { await afterVerified(); $("acct-msg").textContent = "Verified. You're on the weekly leaderboard."; toast("You're on the leaderboard", "ok"); }
+            else $("acct-msg").textContent = "Not verified yet. Tap the link in the email, then try again.";
+        } catch (err) { $("acct-msg").textContent = err.message || "Couldn't check right now."; }
+        renderAccount(); renderAll();
+    });
+    $("acct-resend").addEventListener("click", async () => {
+        try { await store.resendVerification(); $("acct-msg").textContent = "Sent again. Check Junk too."; }
+        catch (err) { $("acct-msg").textContent = err.message; }
+    });
+    $("profile-form").addEventListener("submit", async e => {
+        e.preventDefault();
+        try {
+            const n = await store.saveProfile({ name: $("profile-name").value, show: $("profile-show").checked });
+            pendingName(null);
+            $("acct-msg").textContent = $("profile-show").checked ? `Saved. You're on the board as ${n}.` : "Saved. You're hidden from the board.";
+        } catch (err) { $("acct-msg").textContent = err.message; }
+    });
+    $("profile-show").addEventListener("change", () => $("profile-form").requestSubmit());
+    $("acct-signout").addEventListener("click", async () => {
+        await store.utaSignOut(); state.uid = store.uid;
+        $("acct-msg").textContent = "Signed out. You can still report anonymously.";
+        renderAccount(); renderAdmin(); renderAll();
+    });
 
     // ======================================================================
     //  NOTIFICATIONS (commuter / quiet / off)
@@ -1023,14 +1137,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         $("admin-msg").textContent = "Signing in…";
         try {
             await store.adminSignIn($("admin-email").value.trim(), $("admin-pass").value);
-            state.uid = store.uid;
+            state.uid = store.uid; renderAccount();
             $("admin-msg").textContent = "Welcome, admin.";
             $("admin-pass").value = "";
         } catch (err) { $("admin-msg").textContent = err.message || "Sign-in failed."; }
         renderAdmin(); renderAll();
     });
     $("admin-signout").addEventListener("click", async () => {
-        await store.adminSignOut(); state.uid = store.uid; $("admin-msg").textContent = "Signed out."; renderAdmin(); renderAll();
+        await store.adminSignOut(); state.uid = store.uid; $("admin-msg").textContent = "Signed out."; renderAccount(); renderAdmin(); renderAll();
     });
     $("update-form").addEventListener("submit", async e => {
         e.preventDefault();
@@ -1240,6 +1354,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         ? "Reports sync live to every MavPulse user through the shared backend."
         : "On-device mode: reports are saved in this browser only (shared backend not configured or unreachable).";
     store.onReports(list => { state.reports = list; renderAll(); notifyFromReports(); });
+    if (info.mode === "shared") {
+        store.onWeekReports(list => { state.weekReports = list; renderPoints(); });
+        store.onProfiles(map => { state.profiles = map; renderPoints(); renderAccount(); });
+        // Came back from the verification link? Pick it up automatically.
+        if (store.account && !store.account.verified) store.checkVerified().then(ok => { if (ok) afterVerified(); renderAccount(); renderAll(); }).catch(() => {});
+        document.addEventListener("visibilitychange", () => {
+            if (!document.hidden && store.account && !store.account.verified) store.checkVerified().then(ok => { if (ok) { afterVerified(); toast("Email verified", "ok"); } renderAccount(); renderAll(); }).catch(() => {});
+        });
+    }
+    renderAccount();
     store.onUpdates(list => {
         state.updates = list; renderUpdates(); renderBrief();
         list.filter(u => u.kind === "mavalert" && now() - u.at < 60 * MIN).forEach(u => maybeNotify({ type: "weather", severity: "Extreme", key: "mav-" + u.id, title: `UTA MavAlert: ${u.title}`, body: u.body }));

@@ -343,6 +343,54 @@
         eq(threw, true);
     });
 
+    // ===================== Weekly leaderboard + UTA sign-in =====================
+    const WEEKDAY = 24 * 60 * 60 * 1000;
+    const rep = (uid, target, at, status) => ({ type: "crossing", targetId: target, status: status || "blocked", reporterId: uid, at });
+    test("UTA email: mavs.uta.edu and uta.edu accepted, others rejected", () => {
+        eq(MP.isUtaEmail("abc1234@mavs.uta.edu"), true); eq(MP.isUtaEmail("Prof@UTA.edu"), true);
+        eq(MP.isUtaEmail("me@gmail.com"), false); eq(MP.isUtaEmail("me@uta.edu.evil.com"), false);
+        eq(MP.isUtaEmail("me@fakeuta.edu"), false); eq(MP.isUtaEmail(""), false);
+    });
+    test("Display name: first name only, cleaned, max 20 characters", () => {
+        eq(MP.cleanDisplayName("  kanishkar manoj "), "Kanishkar"); eq(MP.cleanDisplayName("enzo!!"), "Enzo"); eq(MP.cleanDisplayName("O'Neil-Ray"), "O'Neil-Ray");
+        eq(MP.cleanDisplayName("   "), null); eq(MP.cleanDisplayName("A".repeat(30)).length, 20);
+    });
+    test("Leaderboard: ranks signed-in reporters by points this week", () => {
+        const now = T0 + 10 * WEEKDAY;
+        const reports = [rep("a", "cooper", now - WEEKDAY), rep("a", "davis", now - 2 * WEEKDAY), rep("b", "center", now - WEEKDAY)];
+        const board = MP.weeklyLeaderboard(reports, { a: { name: "Ana", show: true }, b: { name: "Ben", show: true } }, now);
+        eq(board.map(r => r.name).join(","), "Ana,Ben"); eq(board[0].points, 20); eq(board[0].rank, 1); eq(board[1].rank, 2);
+    });
+    test("Leaderboard: anonymous reporters earn points but are not listed", () => {
+        const now = T0 + 10 * WEEKDAY;
+        const board = MP.weeklyLeaderboard([rep("anon", "cooper", now - WEEKDAY), rep("a", "davis", now - WEEKDAY)], { a: { name: "Ana", show: true } }, now);
+        eq(board.length, 1); eq(board[0].uid, "a");
+    });
+    test("Leaderboard: people who hide themselves are not listed", () => {
+        const now = T0 + 10 * WEEKDAY;
+        eq(MP.weeklyLeaderboard([rep("a", "cooper", now - WEEKDAY)], { a: { name: "Ana", show: false } }, now).length, 0);
+    });
+    test("Leaderboard: reports older than 7 days don't count", () => {
+        const now = T0 + 10 * WEEKDAY;
+        const board = MP.weeklyLeaderboard([rep("a", "cooper", now - 8 * WEEKDAY), rep("a", "davis", now - WEEKDAY)], { a: { name: "Ana", show: true } }, now);
+        eq(board[0].points, 10);
+    });
+    test("Leaderboard: the +5 backup bonus counts, and ties share a rank", () => {
+        const now = T0 + 10 * WEEKDAY;
+        const reports = [rep("a", "cooper", now - WEEKDAY), rep("b", "cooper", now - WEEKDAY + 60000), rep("c", "davis", now - 2 * WEEKDAY), rep("c", "center", now - 3 * WEEKDAY)];
+        const board = MP.weeklyLeaderboard(reports, { a: { name: "Ana" }, b: { name: "Ben" }, c: { name: "Cy" } }, now);
+        eq(board.find(r => r.uid === "a").points, 15); eq(board.find(r => r.uid === "b").points, 15);
+        eq(board.find(r => r.uid === "c").points, 20); eq(board.find(r => r.uid === "c").rank, 1);
+        eq(board.find(r => r.uid === "a").rank, 2); eq(board.find(r => r.uid === "b").rank, 2);
+    });
+    test("LocalReportStore: UTA sign-in explains it needs the shared backend", async () => {
+        const s = new STORE.LocalReportStore(fakeStorage());
+        await s.init();
+        let msg = "";
+        try { await s.utaSignUp("a@mavs.uta.edu", "secret1"); } catch (e) { msg = e.message; }
+        assert(/shared backend/.test(msg), "message mentions the shared backend");
+    });
+
     // ===================== report =====================
     Promise.all(pending).then(() => {
         const passed = results.filter(r => r.passed).length;

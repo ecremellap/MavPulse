@@ -419,12 +419,54 @@
         return { id: d.route.routeId, name: d.route.name, short: d.route.shortName, color: d.route.color || "#0057a8", stops, path, buses };
     }
 
+
+    // =================================================================
+    //  Weekly leaderboard (asked for by commuter students).
+    //  Only people who signed in with a verified UTA email and chose to be
+    //  shown appear; everyone else still earns points anonymously.
+    // =================================================================
+    const LEADERBOARD_WINDOW_MS = 7 * 24 * 60 * MINUTE;
+
+    function isUtaEmail(email) {
+        return typeof email === "string" && /^[^@\s]+@(mavs\.)?uta\.edu$/i.test(email.trim());
+    }
+
+    // First name only, letters plus ' and -, at most 20 characters.
+    function cleanDisplayName(name) {
+        if (typeof name !== "string") return null;
+        const first = name.trim().split(/\s+/)[0] || "";
+        const clean = first.replace(/[^\p{L}'-]/gu, "").slice(0, 20);
+        if (!clean) return null;
+        return clean.charAt(0).toUpperCase() + clean.slice(1);
+    }
+
+    // reports: any list of reports; profiles: { uid: { name, show } }.
+    function weeklyLeaderboard(reports, profiles, now) {
+        const since = now - LEADERBOARD_WINDOW_MS;
+        const week = (reports || []).filter(r => r && r.at >= since && r.at <= now + MINUTE);
+        const ids = new Set(week.map(r => r.reporterId));
+        const rows = [];
+        ids.forEach(uid => {
+            const p = profiles && profiles[uid];
+            if (!p || p.show === false) return;
+            const name = cleanDisplayName(p.name);
+            if (!name) return;
+            const s = contributorStats(week, uid);
+            if (s.points > 0) rows.push({ uid, name, points: s.points, reports: s.reports, level: s.level });
+        });
+        rows.sort((a, b) => b.points - a.points || b.reports - a.reports || a.name.localeCompare(b.name));
+        let rank = 0, prev = null;
+        rows.forEach((r, i) => { if (r.points !== prev) { rank = i + 1; prev = r.points; } r.rank = rank; });
+        return rows;
+    }
+
     const LOGIC = {
         RULES, shouldConfirmCrossingAlert, crossingState, createClosureReport, activeReports,
         activeClosures, latestStatus, canReport, studyStatus, routeStatus, filterCampusAlerts, shouldNotify, contributorStats,
         buildBrief, minutesAgo, distanceMeters, nearest,
         activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards,
-        TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute
+        TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute,
+        LEADERBOARD_WINDOW_MS, isUtaEmail, cleanDisplayName, weeklyLeaderboard
     };
     root.MP = LOGIC;
     // Back-compat names used by the Iteration 2 tests.

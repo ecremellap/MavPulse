@@ -28,11 +28,24 @@
  *   removeUpdate(id)         -> Promise   (admins only)
  *   adminSignIn(email, pw)   -> Promise<{ isAdmin }>
  *   adminSignOut()           -> Promise
+ *   account                  { email, verified, uta } or null (anonymous)
+ *   utaSignUp(email, pw)     link this anonymous account to a UTA email,
+ *                            so the uid (and its points) carry over; sends
+ *                            a verification email
+ *   utaSignIn(email, pw)     sign in on another device
+ *   resendVerification()     -> Promise
+ *   checkVerified()          -> Promise<boolean>  (refreshes the token)
+ *   utaSignOut()             back to a fresh anonymous account
+ *   onWeekReports(cb)        reports from the last 7 days (leaderboard)
+ *   onProfiles(cb)           { uid: { name, show } } for the leaderboard
+ *   saveProfile({name,show}) verified UTA accounts only (firestore.rules)
  */
 (function (root) {
     "use strict";
 
     const WINDOW_MS = 12 * 60 * 60 * 1000;
+    // Domain helpers (logic.js); required in Node tests, global in the browser.
+    const MPL = () => root.MP || (typeof require !== "undefined" ? require("./logic.js") : {});
 
     // ------------------------------------------------------------------
     class LocalReportStore {
@@ -79,6 +92,15 @@
         async removeUpdate() { throw new Error("Campus updates need the shared backend."); }
         async adminSignIn() { throw new Error("Admin sign-in needs the shared backend."); }
         async adminSignOut() { this.isAdmin = false; }
+        get account() { return null; }
+        async utaSignUp() { throw new Error("UTA sign-in needs the shared backend."); }
+        async utaSignIn() { throw new Error("UTA sign-in needs the shared backend."); }
+        async resendVerification() { throw new Error("UTA sign-in needs the shared backend."); }
+        async checkVerified() { return false; }
+        async utaSignOut() { }
+        onWeekReports(cb) { this.reportListeners.push(cb); cb(this._reports()); }
+        onProfiles(cb) { cb({}); }
+        async saveProfile() { throw new Error("The leaderboard needs the shared backend."); }
     }
 
     // ------------------------------------------------------------------
@@ -113,6 +135,8 @@
             const u = this.auth.currentUser;
             this.uid = u ? u.uid : null;
             this.adminEmail = u && !u.isAnonymous ? u.email : null;
+            this._account = u && !u.isAnonymous && u.email
+                ? { email: u.email, verified: !!u.emailVerified, uta: MPL().isUtaEmail(u.email) } : null;
             this.isAdmin = false;
             if (u && !u.isAnonymous) {
                 try { this.isAdmin = (await this.db.collection("admins").doc(u.uid).get()).exists; }
@@ -162,6 +186,76 @@
             await this.auth.signOut();
             await this.auth.signInAnonymously();
             await this._refreshRole();
+        }
+
+        // ---------------- Optional UTA sign-in ----------------
+        get account() { return this._account || null; }
+        _friendly(e) {
+            const map = {
+                "auth/email-already-in-use": "That UTA email already has an account. Use Sign in instead.",
+                "auth/credential-already-in-use": "That UTA email already has an account. Use Sign in instead.",
+                "auth/weak-password": "Pick a password with at least 6 characters.",
+                "auth/invalid-email": "That doesn't look like an email address.",
+                "auth/wrong-password": "Wrong email or password.",
+                "auth/invalid-credential": "Wrong email or password.",
+                "auth/invalid-login-credentials": "Wrong email or password.",
+                "auth/user-not-found": "No account with that email yet. Use Create account.",
+                "auth/too-many-requests": "Too many tries. Wait a minute and try again.",
+                "auth/network-request-failed": "No connection. Try again when you're online."
+            };
+            return new Error(map[e && e.code] || (e && e.message) || "Sign-in failed.");
+        }
+        async utaSignUp(email, password) {
+            email = String(email || "").trim().toLowerCase();
+            if (!MPL().isUtaEmail(email)) throw new Error("Use your @mavs.uta.edu or @uta.edu email.");
+            const fb = root.firebase;
+            const cred = fb.auth.EmailAuthProvider.credential(email, password);
+            try {
+                const u = this.auth.currentUser;
+                if (u && u.isAnonymous) await u.linkWithCredential(cred);   // same uid, points carry over
+                else await this.auth.createUserWithEmailAndPassword(email, password);
+                await this.auth.currentUser.sendEmailVerification();
+            } catch (e) { throw this._friendly(e); }
+            await this._refreshRole();
+            return this.account;
+        }
+        async utaSignIn(email, password) {
+            email = String(email || "").trim().toLowerCase();
+            if (!MPL().isUtaEmail(email)) throw new Error("Use your @mavs.uta.edu or @uta.edu email.");
+            try { await this.auth.signInWithEmailAndPassword(email, password); }
+            catch (e) { throw this._friendly(e); }
+            await this._refreshRole();
+            return this.account;
+        }
+        async resendVerification() {
+            try { await this.auth.currentUser.sendEmailVerification(); } catch (e) { throw this._friendly(e); }
+        }
+        async checkVerified() {
+            const u = this.auth.currentUser;
+            if (!u || u.isAnonymous) return false;
+            await u.reload();
+            if (this.auth.currentUser.emailVerified) await this.auth.currentUser.getIdToken(true); // rules see email_verified
+            await this._refreshRole();
+            return !!(this._account && this._account.verified);
+        }
+        async utaSignOut() { await this.adminSignOut(); }
+        onWeekReports(cb) {
+            const since = Date.now() - MPL().LEADERBOARD_WINDOW_MS;
+            this.db.collection("reports").where("at", ">=", since).orderBy("at", "desc").limit(3000)
+                .onSnapshot(snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+                    err => console.error("Weekly feed error", err));
+        }
+        onProfiles(cb) {
+            this.db.collection("profiles").limit(1000)
+                .onSnapshot(snap => { const m = {}; snap.docs.forEach(d => { m[d.id] = d.data(); }); cb(m); },
+                    err => console.error("Profiles feed error", err));
+        }
+        async saveProfile({ name, show }) {
+            const clean = MPL().cleanDisplayName(name);
+            if (!clean) throw new Error("Add your first name for the leaderboard.");
+            if (!this.account || !this.account.verified || !this.account.uta) throw new Error("Verify your UTA email first.");
+            await this.db.collection("profiles").doc(this.uid).set({ name: clean, show: show !== false, at: Date.now() });
+            return clean;
         }
     }
 
