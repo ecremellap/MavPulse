@@ -1425,3 +1425,17 @@ button:active, .tripshot-card:active, a.pill-btn:active { transform: scale(0.96)
 .points-sub.rank { color: #ffd9c2; font-weight: 700; }
 @media (prefers-reduced-motion: reduce) { .leaderboard li { animation: none; } }
 .account-card [hidden], .account-card[hidden] { display: none !important; }
+
+/* ---------- Map markers with meaning: study pins, bus-stop signs, offense glyphs ---------- */
+.pin { position: relative; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--pin, #6d28d9); border: 2.5px solid #fff; box-shadow: 0 3px 7px rgba(15,30,51,.35); }
+.pin .mi { transform: rotate(45deg); width: 14px; height: 14px; }
+.pin.study { --pin: #6d28d9; }
+.pin.study.open { --pin: var(--signal-green); }
+.pin.study.busy { --pin: var(--blaze); }
+.stop-mk { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 5px; background: #fff; border: 2.5px solid var(--route, #0057a8); box-shadow: 0 1px 4px rgba(15,30,51,.3); }
+.stop-mk .mi { width: 10px; height: 10px; stroke: var(--route, #0057a8); stroke-width: 2.6; }
+.crime-mk { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 7px; background: var(--c, #64748b); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(15,30,51,.35); opacity: .92; }
+.crime-mk .mi { width: 12px; height: 12px; }
+.safety-chip { display: inline-flex; align-items: center; gap: 2px; }
+.crime-mk.sm { width: 16px; height: 16px; border-radius: 5px; border-width: 1.5px; box-shadow: none; }
+.crime-mk.sm .mi { width: 9px; height: 9px; }

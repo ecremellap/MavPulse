@@ -152,6 +152,14 @@ document.addEventListener("DOMContentLoaded", async () => {
             switchView("report");
         });
     }
+    // Teardrop pin with a glyph, so every layer reads at a glance.
+    function pin(cls, glyph, title) {
+        return L.divIcon({ className: "mp-marker", html: `<span class="pin ${cls}" title="${(title || "").replace(/"/g, "")}">${svg(glyph, "mi")}</span>`, iconSize: [28, 34], iconAnchor: [14, 32], popupAnchor: [0, -28] });
+    }
+    // Small square bus-stop sign in the route's color.
+    function stopIcon(color) {
+        return L.divIcon({ className: "mp-marker", html: `<span class="stop-mk" style="--route:${color}">${svg("bus", "mi")}</span>`, iconSize: [18, 18], iconAnchor: [9, 9] });
+    }
     function dot(cls, label) {
         return L.divIcon({ className: "mp-marker", html: `<span class="mk ${cls}">${label || ""}</span>`, iconSize: [22, 22], iconAnchor: [11, 11] });
     }
@@ -270,7 +278,7 @@ document.addEventListener("DOMContentLoaded", async () => {
                 seen.get(st.name).routes.push(r.name);
             }));
             seen.forEach(st => {
-                L.marker([st.lat, st.lng], { icon: dot("shuttles", "") })
+                L.marker([st.lat, st.lng], { icon: stopIcon("#0057a8") })
                     .bindPopup(popupHTML(st.name, [`MavMover: ${st.routes.join(", ")}`, "Shown at the named building; exact stop may differ."])).addTo(layers.shuttles);
             });
             return;
@@ -279,7 +287,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             layers.shuttles.clearLayers(); busMarkers.clear(); shuttleBase = "live";
             live.forEach(r => {
                 if (r.path.length > 1) L.polyline(r.path, { color: r.color, weight: 4, opacity: 0.55, interactive: false }).addTo(layers.shuttles);
-                r.stops.forEach(st => L.circleMarker([st.lat, st.lng], { radius: 4, color: r.color, weight: 2, fillColor: "#fff", fillOpacity: 1 })
+                r.stops.forEach(st => L.marker([st.lat, st.lng], { icon: stopIcon(r.color) })
                     .bindPopup(popupHTML(st.name, [`MavMover ${r.name}`])).addTo(layers.shuttles));
             });
         }
@@ -341,7 +349,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         layers.study.clearLayers();
         D.STUDY_SPOTS.forEach(s => {
             const st = studyState(s);
-            L.marker([s.lat, s.lng], { icon: dot("study", "") })
+            const cls = st.source === "live" ? (st.status === "busy" ? "study busy" : "study open") : "study";
+            L.marker([s.lat, s.lng], { icon: pin(cls, "book", s.name) })
                 .bindPopup(popupHTML(s.name, [studyLabel(s, st)])).addTo(layers.study);
         });
     }
@@ -1210,6 +1219,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         } catch (e) { console.warn("Rail line unavailable", e); }
     }
     let safetyLoaded = false;
+    const CRIME_GLYPHS = { Assault: "bolt", Robbery: "alert", "Car break-in": "car", "Vehicle theft": "key", Burglary: "home", Theft: "bag", Vandalism: "spray", Drugs: "pill", Weapons: "alert", Fraud: "card", Other: "shield" };
     const CRIME_COLORS = { Assault: "#b91c1c", Robbery: "#7f1d1d", "Car break-in": "#c2410c", "Vehicle theft": "#ea580c", Burglary: "#a16207", Theft: "#ca8a04", Vandalism: "#6b7280", Drugs: "#7c3aed", Weapons: "#111827", Fraud: "#0e7490", Other: "#64748b" };
     async function loadSafety() {
         if (safetyLoaded) return;
@@ -1220,7 +1230,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             const [crime, calls] = await Promise.all([window.MP_CITY.crime(30), window.MP_CITY.policeCalls()]);
             const sum = MP.summarizeCrime(crime, now(), 30);
             layers.safety.clearLayers();
-            sum.mappable.forEach(c => L.circleMarker([c.lat, c.lng], { radius: 6, color: "#fff", weight: 1, fillColor: CRIME_COLORS[c.category] || "#64748b", fillOpacity: 0.75 })
+            sum.mappable.forEach(c => L.marker([c.lat, c.lng], { icon: L.divIcon({ className: "mp-marker", html: `<span class="crime-mk" style="--c:${CRIME_COLORS[c.category] || "#64748b"}">${svg(CRIME_GLYPHS[c.category] || "shield", "mi")}</span>`, iconSize: [22, 22], iconAnchor: [11, 11] }) })
                 .bindPopup(popupHTML(c.category, [new Date(c.at).toLocaleDateString([], { month: "short", day: "numeric" }), "Arlington PD reported offense"])).addTo(layers.safety));
             calls.forEach(f => {
                 if (!f.geometry) return;
@@ -1232,7 +1242,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             card.innerHTML = "";
             card.appendChild(el("div", "safety-title", `${sum.total} offenses reported near campus in the last 30 days · ${calls.length} active police call${calls.length === 1 ? "" : "s"} now`));
             const chips = el("div", "safety-chips");
-            sum.byCategory.forEach(([name, n]) => { const c = el("span", "safety-chip", `${name} ${n}`); c.style.borderColor = CRIME_COLORS[name] || "#64748b"; chips.appendChild(c); });
+            sum.byCategory.forEach(([name, n]) => {
+                const c = el("span", "safety-chip"); c.style.borderColor = CRIME_COLORS[name] || "#64748b";
+                c.innerHTML = `<span class="crime-mk sm" style="--c:${CRIME_COLORS[name] || "#64748b"}">${svg(CRIME_GLYPHS[name] || "shield", "mi")}</span>`;
+                c.append(` ${name} ${n}`); chips.appendChild(c);
+            });
             card.appendChild(chips);
             card.appendChild(el("p", "source-note", "Source: City of Arlington Police Department public data (crime updated nightly, calls every 15 min). Incidents handled by UTA Police on campus are not included. Sex offenses and juvenile cases are counted but never pinned on the map, to protect victims. For an emergency call 911."));
             const a = el("a", "text-btn", "Search Arlington crime reports"); a.href = D.LINKS.cityCrimeSearch; a.target = "_blank"; a.rel = "noopener";
