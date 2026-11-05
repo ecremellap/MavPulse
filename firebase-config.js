@@ -17,4 +17,4 @@ window.MAVPULSE_FIREBASE_CONFIG = {
  * deployed on Cloudflare Workers), e.g. "https://mavpulse-relay.<you>.workers.dev".
  * null = show the schedule and link to TripShot instead.
  */
-window.MAVPULSE_SHUTTLE_RELAY = null;
+window.MAVPULSE_SHUTTLE_RELAY = "https://mavpulse-relay.kanishkarraam-manoj2004.workers.dev";
