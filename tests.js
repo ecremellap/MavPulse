@@ -406,6 +406,41 @@
         assert(/shared backend/.test(msg), "message mentions the shared backend");
     });
 
+    test("Commute: west approach starts with Bowen, Davis and Cooper", () => {
+        const c = MP.defaultCommute("west");
+        eq(c.crossings.join(","), "bowen,davis,cooper");
+        eq(MP.cleanCommute({ direction: "east", crossings: ["nope", "collins"], arriveBy: "09:20", days: ["tue"] }).crossings.join(","), "collins");
+        eq(MP.cleanCommute(null), null);
+    });
+    test("Crossing pattern: hidden until 20 blocked reports, then names the busiest hour", () => {
+        const hour = h => { const d = new Date(T0); d.setHours(h, 15, 0, 0); return d.getTime(); };
+        const few = [0, 1, 2].map(i => ({ type: "crossing", targetId: "cooper", status: "blocked", at: hour(8) + i, reporterId: "u" + i }));
+        eq(MP.crossingPattern(few, "cooper", hour(12)).enough, false);
+        eq(MP.crossingPattern(few, "cooper", hour(12)).total, 3);
+        const many = [];
+        for (let i = 0; i < 20; i++) many.push({ type: "crossing", targetId: "cooper", status: "blocked", at: hour(8) + i, reporterId: "u" + i });
+        const pat = MP.crossingPattern(many, "cooper", hour(12));
+        eq(pat.enough, true);
+        assert(pat.window.indexOf("8") !== -1, pat.window);
+    });
+    test("Alert before arrival only inside the 45 minutes on a saved day", () => {
+        const commute = { crossings: ["cooper"], arriveBy: "09:00", days: [], alertBefore: true };
+        const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.getTime(); };
+        eq(MP.shouldAlertBefore(commute, { id: "cooper", state: "confirmed" }, at(8, 30)), true);
+        eq(MP.shouldAlertBefore(commute, { id: "cooper", state: "confirmed" }, at(7, 0)), false);
+        eq(MP.shouldAlertBefore(commute, { id: "davis", state: "confirmed" }, at(8, 30)), false);
+        eq(MP.shouldAlertBefore({ ...commute, alertBefore: false }, { id: "cooper", state: "confirmed" }, at(8, 30)), false);
+    });
+    test("Detour handoff: Davis route is about 1.8 mi and opens in three maps", () => {
+        const h = MP.detourHandoff(DET.DETOURS.davis);
+        eq(h.miles, 1.8);
+        eq(h.minutes, 5);
+        eq(h.via, "West St underpass");
+        assert(h.apple.indexOf("maps.apple.com") !== -1, "apple");
+        assert(h.google.indexOf("google.com/maps") !== -1, "google");
+        assert(h.waze.indexOf("waze.com") !== -1, "waze");
+    });
+
     // ===================== report =====================
     Promise.all(pending).then(() => {
         const passed = results.filter(r => r.passed).length;

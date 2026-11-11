@@ -1506,6 +1506,25 @@ body {
 .more-fold[open] summary::after { transform: rotate(225deg) translateY(-1px); }
 #test-mode[hidden] { display: none; }
 
+.offline-banner { background: #243044; color: #fff; padding: 10px 16px; font-size: 13px; line-height: 1.4; }
+.offline-banner[hidden] { display: none; }
+.commute-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: calc(100% - 32px); margin: 0 16px 14px; padding: 14px 16px; border: 0; border-radius: 16px; background: #fff; box-shadow: 0 1px 0 rgba(15, 30, 51, 0.06); text-align: left; cursor: pointer; }
+.commute-kicker { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mav-blue); }
+#commute-summary { font-size: 15px; font-weight: 650; color: var(--ink); }
+.pat-link { margin-top: 2px; padding: 0; min-height: 0; font-size: 12px; }
+.pattern-window { font-size: 26px; font-weight: 800; margin: 4px 0; }
+.pattern-chart { display: flex; align-items: flex-end; gap: 3px; height: 110px; margin: 12px 0 16px; }
+.pattern-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.pattern-col span { display: block; width: 100%; background: var(--mav-blue); border-radius: 3px 3px 0 0; min-height: 2px; }
+.pattern-col small { font-size: 8px; color: var(--ink-2); line-height: 1; }
+.sheet-links { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.sheet-links a { text-decoration: none; text-align: center; }
+.warn-card { background: #fff6e8; border-radius: 14px; padding: 12px 14px; margin: 8px 0 14px; }
+.warn-card[hidden] { display: none; }
+.warn-card strong { display: block; margin-bottom: 4px; }
+.day-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.check-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 12px; }
+
 /* UTA vs other accounts */
 .kind-seg { margin: 0 0 8px; }
 .lb-label { font-size: 13px; font-weight: 800; color: var(--ink-2); margin: 12px 0 6px; letter-spacing: 0.02em; }

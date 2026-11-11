@@ -78,6 +78,7 @@
             <button class="icon-btn" id="open-profile" type="button" aria-label="Profile and settings"><svg class="i" aria-hidden="true"><use href="#i-user"/></svg></button>
         </div>
     </header>
+    <div class="offline-banner" id="offline-banner" hidden>You're offline. Showing the last conditions we loaded<span id="offline-since"></span>. Reports you make stay on this phone until you're back online.</div>
 
     <main class="main-content">
 
@@ -92,6 +93,11 @@
                     <div class="brief-headline" id="brief-headline">Checking conditions…</div>
                     <ul class="brief-lines" id="brief-lines"></ul>
                 </div>
+
+                <button class="commute-card" id="open-commute" type="button">
+                    <span class="commute-kicker" id="commute-kicker">My commute</span>
+                    <span id="commute-summary">Set the crossings, lot, and arrival time on your way in.</span>
+                </button>
 
                 <div id="mavalert-list"></div>
                 <div id="crossing-alerts"></div>
@@ -273,6 +279,14 @@
 
     <!-- ============ PROFILE / SETTINGS SHEET ============ -->
     <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+    <aside class="sheet" id="extra-sheet" hidden aria-label="Details">
+        <div class="sheet-grip" aria-hidden="true"></div>
+        <div class="sheet-head">
+            <h2 id="extra-title">Details</h2>
+            <button class="icon-btn dark" id="close-extra" type="button" aria-label="Close"><svg class="i" aria-hidden="true"><use href="#i-close"/></svg></button>
+        </div>
+        <div class="sheet-body" id="extra-body"></div>
+    </aside>
     <aside class="sheet" id="profile-sheet" hidden aria-label="Profile and settings">
         <div class="sheet-grip" aria-hidden="true"></div>
         <div class="sheet-head">
@@ -333,6 +347,11 @@
                 <button type="button" data-mode="off">Off</button>
             </div>
             <p class="section-hint" id="notify-help"></p>
+            <div class="warn-card" id="notify-blocked" hidden>
+                <strong>Notifications are blocked</strong>
+                <p>Your phone is blocking alerts, so you'll only see them inside the app.</p>
+                <p class="section-hint">iPhone: Settings → Notifications, or Safari → this site → Allow. Android: the lock icon in the address bar → Permissions → Notifications → Allow. If MavPulse is installed, also allow notifications for the app. A fully closed app cannot be woken without a push server, which this free host does not run. Android can still show a lock-screen alert while the installed app is in the background.</p>
+            </div>
 
             <h3>Install on your phone</h3>
             <p class="section-hint">iPhone: Safari → Share → <b>Add to Home Screen</b>. Android: Chrome → ⋮ → <b>Install app</b>. No app store needed.</p>

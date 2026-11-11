@@ -41,6 +41,14 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 | Admins: post official campus updates, remove bad reports | Firebase Auth + `/admins` allowlist | Live |
 | Test mode: simulate a train | Local only | Hidden. Open the app with `?demo=1`, or sign in as an admin |
 
+The next-iteration screens from the review deck are in the app now:
+
+- **My commute** on Home saves your direction, crossings, lot, and arrival time on this phone, and the brief calls out your route.
+- **Patterns** on each crossing stay hidden until 20 blocked reports in the last 7 days, then show the busiest hour. Fewer than that says how many are still needed.
+- **Open in Maps** hands the underpass or bridge route to Apple Maps, Google Maps, or Waze. The distance is the mapped route at about 20 mph, not live traffic.
+- **Offline** keeps a banner with the last refresh time and queues a report until the connection returns.
+- **Notifications blocked** explains how to allow them. A confirmed train can reach the lock screen on Android while the installed app is in the background. A fully closed app needs a push server, which this host does not run.
+
 "Shared" means reports sync to every user in real time through Firebase (Firestore). Without a Firebase config the app runs in on-device mode with the same features.
 
 ## Code structure
@@ -57,14 +65,14 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 | `script.js` | UI wiring for the five tabs, map layers and settings |
 | `firestore.rules` | Server-side security: report shape validation, only reporters/admins can delete, only admins post updates, nobody can make themselves admin. A profile can be saved only after the email is verified, and its UTA flag must match that email. |
 | `sw.js`, `manifest.webmanifest` | Installable PWA + offline app shell |
-| `tests.js`, `tests.html` | 86 automated tests |
+| `tests.js`, `tests.html` | 90 automated tests |
 
 ## Run and test
 
 No build step. Serve the folder with any static server, e.g. `python3 -m http.server`, then open `http://localhost:8000`.
 
 ```
-node tests.js        # 86 / 86 tests passed
+node tests.js        # 90 / 90 tests passed
 ```
 
 ## Shared backend setup (Firebase)

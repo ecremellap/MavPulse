@@ -34,12 +34,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
     // Placeholder until the real ReportStore connects (see bottom of file).
     let store = { isAdmin: false, addReport: async () => { throw new Error("Still connecting"); }, removeReport: async () => {} };
-    const allReports = () => state.reports.concat(state.simReports);
+    const OUTBOX = "mavpulse-outbox";
+    function readOutbox() { return loadJSON(OUTBOX, []).filter(r => r && r.at); }
+    function writeOutbox(list) { try { localStorage.setItem(OUTBOX, JSON.stringify(list)); } catch (e) { /* ignore */ } }
+    const allReports = () => state.reports.concat(state.simReports, readOutbox().filter(o => !state.reports.some(r => r.reporterId === o.reporterId && r.targetId === o.targetId && r.at === o.at && r.status === o.status)));
     const now = () => Date.now();
 
     function loadPref(k, dflt) { try { return localStorage.getItem(k) || dflt; } catch (e) { return dflt; } }
     function savePref(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
     function loadJSON(k, dflt) { try { return JSON.parse(localStorage.getItem(k)) || dflt; } catch (e) { return dflt; } }
+    state.commute = MP.cleanCommute(loadJSON("mavpulse-commute", null));
+    state.lastLiveAt = Number(loadPref("mavpulse-last-live", "")) || null;
     const svg = (name, cls) => `<svg class="${cls || "i"}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
     function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
@@ -443,6 +448,10 @@ document.addEventListener("DOMContentLoaded", async () => {
                 : c.state === "confirmed" ? `Blocked, confirmed by ${c.reporters} · ${MP.minutesAgo(c.lastAt, now())}`
                 : `1 report · ${MP.minutesAgo(c.lastAt, now())} · needs one more`;
             left.appendChild(el("div", "crossing-sub", sub));
+            const patterns = el("button", "text-btn pat-link", "Patterns");
+            patterns.type = "button";
+            patterns.addEventListener("click", () => openPattern(c.id));
+            left.appendChild(patterns);
             const reportable = c.state === "clear" || c.state === "likely";
             const btn = el("button", "row-btn " + (reportable ? "" : "ok"), reportable ? (c.state === "likely" ? "Confirm" : "Train here") : "It's clear");
             btn.type = "button";
@@ -473,6 +482,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             same.addEventListener("click", () => reportCrossing(c.id, c.state === "confirmed" ? "clear" : "blocked"));
             actions.append(show, same);
             card.appendChild(actions);
+            const maps = el("button", "text-btn", "Open in Maps");
+            maps.type = "button";
+            maps.addEventListener("click", () => openDetour(c.id));
+            card.appendChild(maps);
             alerts.appendChild(card);
         });
 
@@ -495,15 +508,24 @@ document.addEventListener("DOMContentLoaded", async () => {
             toast("You already reported this. You can report it again in 2 minutes.", "warn");
             return false;
         }
+        const full = { ...report, reporterId: state.uid, at: now() };
+        if (!navigator.onLine) {
+            writeOutbox(readOutbox().concat([{ ...full, id: "out-" + full.at }]));
+            toast("Saved on this phone. It sends when you're back online.", "warn");
+            renderAll();
+            return true;
+        }
         try {
             const tapped = lastTap;
-            await store.addReport({ ...report, reporterId: state.uid, at: now() });
+            await store.addReport(full);
             celebrate(tapped, MP.RULES.POINTS_PER_REPORT);
             toast(okMsg, "ok");
             return true;
         } catch (e) {
             console.error(e);
-            toast("Report not sent. Check your connection and tap again.", "warn");
+            writeOutbox(readOutbox().concat([{ ...full, id: "out-" + full.at }]));
+            toast("Couldn't reach the server. Saved on this phone and will retry.", "warn");
+            renderAll();
             return false;
         }
     }
@@ -867,7 +889,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             crossings: crossingStates().map(c => state.simReports.some(r => r.targetId === c.id) ? { ...c, name: `${c.name} (simulated)` } : c),
             closures: MP.activeClosures(allReports(), now()), routesRunning: running,
             roadWork: state.roadWork ? state.roadWork.length : undefined,
-            mavAlerts: state.updates.filter(u => u.kind === "mavalert" && now() - u.at < 24 * 60 * MIN), now: now()
+            mavAlerts: state.updates.filter(u => u.kind === "mavalert" && now() - u.at < 24 * 60 * MIN), now: now(),
+            route: state.commute && state.commute.crossings
         });
         const card = $("brief-card");
         card.dataset.level = brief.level;
@@ -1110,6 +1133,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); b.setAttribute("role", "radio");
         });
         $("notify-help").textContent = MODE_HELP[state.notifyMode];
+        const blocked = "Notification" in window && Notification.permission === "denied";
+        $("notify-blocked").hidden = !blocked;
     }
     document.querySelectorAll("#notify-mode button").forEach(b => b.addEventListener("click", async () => {
         state.notifyMode = b.dataset.mode;
@@ -1118,6 +1143,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (state.notifyMode !== "off" && "Notification" in window && Notification.permission === "default") {
             try { await Notification.requestPermission(); } catch (e) { /* older Safari */ }
         }
+        renderNotifyMode();
     }));
     async function maybeNotify(event) {
         if (state.notified.has(event.key)) return;
@@ -1128,15 +1154,26 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!("Notification" in window) || Notification.permission !== "granted") return;
         try {
             const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
-            if (reg) reg.showNotification(event.title, { body: event.body, icon: "icons/icon-192.png", tag: event.key });
+            if (reg) reg.showNotification(event.title, { body: event.body, icon: "icons/icon-192.png", tag: event.key, data: { url: event.url || "./" } });
             else new Notification(event.title, { body: event.body, icon: "icons/icon-192.png" });
         } catch (e) { console.warn("Notification failed", e); }
     }
     function notifyFromReports() {
-        crossingStates().filter(c => c.state === "confirmed").forEach(c => maybeNotify({
-            type: "crossing", state: "confirmed", key: `x-${c.id}-${c.since}`,
-            title: `Train blocking ${c.name}`, body: `Confirmed by ${c.reporters} commuters. ${c.detour}.`
-        }));
+        crossingStates().filter(c => c.state === "confirmed").forEach(c => {
+            const hand = window.MP_DETOURS && MP.detourHandoff(window.MP_DETOURS.DETOURS[c.id]);
+            maybeNotify({
+                type: "crossing", state: "confirmed", key: `x-${c.id}-${c.since}`,
+                title: `Train blocking ${c.name}`,
+                body: `Confirmed by ${c.reporters} commuters. Tap for the ${hand ? hand.via : "detour"}.`,
+                url: `./?detour=${c.id}`
+            });
+            if (MP.shouldAlertBefore(state.commute, c, now())) maybeNotify({
+                type: "crossing", state: "confirmed", key: `before-${c.id}-${c.since}`,
+                title: `Before you leave: ${c.name} is blocked`,
+                body: hand ? `${hand.via}. About ${hand.miles} mi.` : c.detour,
+                url: `./?detour=${c.id}`
+            });
+        });
         MP.activeClosures(state.reports, now()).filter(c => c.reporterId !== state.uid).forEach(c => maybeNotify({
             type: "closure", key: `c-${c.targetId}-${c.kind}-${Math.floor(c.at / (30 * MIN))}`,
             title: `${(D.CLOSURE_KINDS.find(k => k.id === c.kind) || {}).label || "Closure"}: ${c.label}`, body: "Reported by a commuter on MavPulse."
@@ -1169,6 +1206,201 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     // ======================================================================
+    //  MY COMMUTE, PATTERNS, DETOUR HANDOFF
+    // ======================================================================
+    function saveCommute(c) {
+        state.commute = MP.cleanCommute(c);
+        if (state.commute) savePref("mavpulse-commute", JSON.stringify(state.commute));
+        else try { localStorage.removeItem("mavpulse-commute"); } catch (e) { /* ignore */ }
+        renderCommuteCard();
+        renderBrief();
+    }
+    function renderCommuteCard() {
+        const card = $("open-commute");
+        if (!card) return;
+        const c = state.commute;
+        if (!c) {
+            $("commute-kicker").textContent = "My commute";
+            $("commute-summary").textContent = "Set the crossings, lot, and arrival time on your way in.";
+            return;
+        }
+        const names = c.crossings.map(id => (D.CROSSINGS.find(x => x.id === id) || {}).name).filter(Boolean);
+        const lot = (D.PARKING.find(p => p.id === c.lot) || {}).name;
+        const when = c.arriveBy ? `Arrive by ${c.arriveBy}` : "";
+        $("commute-kicker").textContent = "My commute";
+        $("commute-summary").textContent = [names.join(", ") || "No crossings selected", lot, when].filter(Boolean).join(" · ");
+    }
+    function openExtra(title, fill) {
+        if (!$("profile-sheet").hidden) closeSheet();
+        $("extra-title").textContent = title;
+        const body = $("extra-body");
+        body.innerHTML = "";
+        fill(body);
+        const sh = $("extra-sheet"), bd = $("sheet-backdrop");
+        sh.hidden = false; bd.hidden = false;
+        requestAnimationFrame(() => { sh.classList.add("open"); bd.classList.add("open"); });
+    }
+    function closeExtra() {
+        const sh = $("extra-sheet"), bd = $("sheet-backdrop");
+        sh.classList.remove("open");
+        const profileOpen = !$("profile-sheet").hidden;
+        if (!profileOpen) bd.classList.remove("open");
+        setTimeout(() => { sh.hidden = true; if ($("profile-sheet").hidden) bd.hidden = true; }, reduceMotion ? 0 : 260);
+    }
+    function openCommute() {
+        let draft = state.commute ? JSON.parse(JSON.stringify(state.commute)) : MP.defaultCommute("west");
+        const paint = () => openExtra("My commute", body => {
+            body.appendChild(el("p", "section-hint", "How do you reach campus?"));
+            const seg = el("div", "seg");
+            [["west", "From the west"], ["east", "From the east"], ["south", "From the south"]].forEach(([dir, label]) => {
+                const b = el("button", draft.direction === dir ? "on" : "", label);
+                b.type = "button";
+                b.addEventListener("click", () => {
+                    const next = MP.defaultCommute(dir);
+                    next.lot = draft.lot; next.arriveBy = draft.arriveBy; next.days = draft.days; next.alertBefore = draft.alertBefore;
+                    draft = next; paint();
+                });
+                seg.appendChild(b);
+            });
+            body.appendChild(seg);
+            body.appendChild(el("p", "section-hint", "Crossings on your route"));
+            const list = el("div", "check-list");
+            D.CROSSINGS.forEach(c => {
+                const row = el("label", "check-row");
+                const box = el("input"); box.type = "checkbox"; box.checked = draft.crossings.indexOf(c.id) !== -1;
+                box.addEventListener("change", () => {
+                    draft.crossings = box.checked ? draft.crossings.concat(c.id) : draft.crossings.filter(id => id !== c.id);
+                });
+                row.append(box, document.createTextNode(" " + c.name));
+                list.appendChild(row);
+            });
+            body.appendChild(list);
+            body.appendChild(el("p", "section-hint", "Where you park"));
+            const lot = el("select", "big-select");
+            const none = el("option", null, "I don't park on campus"); none.value = ""; lot.appendChild(none);
+            D.PARKING.forEach(p => { const o = el("option", null, p.name); o.value = p.id; lot.appendChild(o); });
+            lot.value = draft.lot || "";
+            lot.addEventListener("change", () => { draft.lot = lot.value; });
+            body.appendChild(lot);
+            body.appendChild(el("p", "section-hint", "Arrive by"));
+            const time = el("input", "big-select"); time.type = "time"; time.value = draft.arriveBy || "";
+            time.addEventListener("change", () => { draft.arriveBy = time.value; });
+            body.appendChild(time);
+            body.appendChild(el("p", "section-hint", "Days"));
+            const days = el("div", "day-row");
+            [["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"], ["fri", "Fri"]].forEach(([id, label]) => {
+                const b = el("button", "chip" + (draft.days.indexOf(id) !== -1 ? " on" : ""), label);
+                b.type = "button";
+                b.addEventListener("click", () => {
+                    draft.days = draft.days.indexOf(id) === -1 ? draft.days.concat(id) : draft.days.filter(d => d !== id);
+                    b.classList.toggle("on");
+                });
+                days.appendChild(b);
+            });
+            body.appendChild(days);
+            const alertRow = el("label", "check-row");
+            const alertBox = el("input"); alertBox.type = "checkbox"; alertBox.checked = !!draft.alertBefore;
+            alertBox.addEventListener("change", () => { draft.alertBefore = alertBox.checked; });
+            alertRow.append(alertBox, document.createTextNode(" Alert me before my usual time"));
+            body.appendChild(alertRow);
+            const save = el("button", "small-btn", "Save my commute"); save.type = "button";
+            save.addEventListener("click", () => { saveCommute(draft); closeExtra(); toast("Commute saved on this phone.", "ok"); });
+            body.appendChild(save);
+            if (state.commute) {
+                const clear = el("button", "text-btn", "Clear my commute"); clear.type = "button";
+                clear.addEventListener("click", () => { saveCommute(null); closeExtra(); });
+                body.appendChild(clear);
+            }
+        });
+        paint();
+    }
+    function openPattern(id) {
+        const c = D.CROSSINGS.find(x => x.id === id);
+        const reports = state.weekReports || state.reports;
+        const pat = MP.crossingPattern(reports.concat(readOutbox()), id, now());
+        const typical = MP.typicalBlockMinutes(reports, id);
+        openExtra(`${c.name} patterns`, body => {
+            if (!pat.enough) {
+                body.appendChild(el("h3", null, "Not enough reports yet"));
+                body.appendChild(el("p", "section-hint", `Patterns appear after ${pat.need} blocked reports at this crossing. Counts use the last 7 days.`));
+                body.appendChild(el("p", "pattern-window", `${pat.total} of ${pat.need}`));
+                const b = el("button", "small-btn", "Report a train here"); b.type = "button";
+                b.addEventListener("click", () => { closeExtra(); reportCrossing(id, "blocked"); });
+                body.appendChild(b);
+                return;
+            }
+            body.appendChild(el("p", "section-hint", "Busiest hour from real blocked reports"));
+            body.appendChild(el("p", "pattern-window", pat.window));
+            body.appendChild(el("p", "section-hint", typical
+                ? `Typical block about ${typical} min, measured from reports that were later marked clear.`
+                : "Not enough “it's clear” reports yet to time how long a block usually lasts."));
+            const chart = el("div", "pattern-chart");
+            const max = Math.max(1, ...pat.buckets.map(b => b.count));
+            pat.buckets.forEach(b => {
+                const col = el("div", "pattern-col");
+                const bar = el("span");
+                bar.style.height = `${Math.max(2, Math.round((b.count / max) * 100))}%`;
+                col.append(bar, el("small", null, b.label));
+                chart.appendChild(col);
+            });
+            body.appendChild(chart);
+            const alertBtn = el("button", "small-btn", "Alert me before my usual time"); alertBtn.type = "button";
+            alertBtn.addEventListener("click", () => {
+                if (!state.commute || !state.commute.arriveBy) { toast("Set an arrival time first."); openCommute(); return; }
+                if (state.commute.crossings.indexOf(id) === -1) state.commute.crossings.push(id);
+                state.commute.alertBefore = true;
+                saveCommute(state.commute);
+                toast("If this crossing is confirmed blocked in the 45 minutes before you arrive, you'll get an alert.", "ok");
+            });
+            body.appendChild(alertBtn);
+        });
+    }
+    function openDetour(id) {
+        const c = D.CROSSINGS.find(x => x.id === id);
+        const raw = window.MP_DETOURS && window.MP_DETOURS.DETOURS[id];
+        const hand = MP.detourHandoff(raw);
+        if (!c || !hand) { toast("No mapped detour for that crossing."); return; }
+        const over = id === "bowen";
+        openExtra("Your detour", body => {
+            body.appendChild(el("h3", null, c.name));
+            body.appendChild(el("p", null, `${hand.via} goes ${over ? "over" : "under"} the tracks, so a train there does not block it. About ${hand.miles} mi, ${hand.minutes} min.`));
+            body.appendChild(el("p", "section-hint", hand.note));
+            const links = el("div", "sheet-links");
+            [["Apple Maps", hand.apple], ["Google Maps", hand.google], ["Waze", hand.waze]].forEach(([label, href]) => {
+                const a = el("a", "pill-btn", label);
+                a.href = href; a.target = "_blank"; a.rel = "noopener";
+                links.appendChild(a);
+            });
+            body.appendChild(links);
+        });
+    }
+    $("open-commute").addEventListener("click", openCommute);
+    $("close-extra").addEventListener("click", closeExtra);
+
+    function renderOffline() {
+        const banner = $("offline-banner");
+        if (!banner) return;
+        const off = typeof navigator !== "undefined" && navigator.onLine === false;
+        banner.hidden = !off;
+        if (!off) return;
+        const when = state.lastLiveAt ? new Date(state.lastLiveAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+        $("offline-since").textContent = when ? ` from ${when}` : "";
+    }
+    async function flushOutbox() {
+        let box = readOutbox();
+        if (!box.length || !navigator.onLine || !store || !store.addReport) return;
+        while (box.length) {
+            try {
+                await store.addReport(box[0]);
+                box = box.slice(1);
+                writeOutbox(box);
+            } catch (e) { break; }
+        }
+    }
+    window.addEventListener("online", () => { renderOffline(); flushOutbox(); });
+    window.addEventListener("offline", () => renderOffline());
+
+    // ======================================================================
     //  PROFILE SHEET + ADMIN
     // ======================================================================
     function openSheet() {
@@ -1194,7 +1426,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     })();
     $("open-profile").addEventListener("click", openSheet);
     $("close-profile").addEventListener("click", closeSheet);
-    $("sheet-backdrop").addEventListener("click", closeSheet);
+    $("sheet-backdrop").addEventListener("click", () => { if (!$("extra-sheet").hidden) closeExtra(); else closeSheet(); });
     $("admin-volunteer").href = D.LINKS.teamEmail;
 
     function renderAdmin() {
@@ -1389,6 +1621,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         renderUpdates();
         renderPoints();
         drawCrossingLayer();
+        renderCommuteCard();
+        renderOffline();
         drawParkingLayer();
         drawStudyLayer();
         updateMapFooter();
@@ -1431,7 +1665,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     $("about-note").textContent = info.mode === "shared"
         ? "Reports sync live to every MavPulse user through the shared backend."
         : "On-device mode: reports are saved in this browser only (shared backend not configured or unreachable).";
-    store.onReports(list => { state.reports = list; renderAll(); notifyFromReports(); });
+    store.onReports(list => {
+        state.reports = list;
+        if (navigator.onLine) { state.lastLiveAt = Date.now(); savePref("mavpulse-last-live", String(state.lastLiveAt)); }
+        renderAll(); notifyFromReports();
+    });
     if (info.mode === "shared") {
         store.onWeekReports(list => { state.weekReports = list; renderPoints(); });
         store.onProfiles(map => { state.profiles = map; renderPoints(); renderAccount(); });
@@ -1454,4 +1692,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setInterval(loadRoadWork, 30 * 60 * 1000);
     setInterval(() => { if (safetyLoaded && map && map.hasLayer(layers.safety)) { safetyLoaded = false; loadSafety(); } }, 15 * 60 * 1000);
     setInterval(loadWeather, 15 * 60 * 1000);
+    flushOutbox();
+    const startDetour = new URLSearchParams(location.search).get("detour");
+    if (startDetour && D.CROSSINGS.some(c => c.id === startDetour)) openDetour(startDetour);
 });

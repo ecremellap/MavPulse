@@ -3,7 +3,7 @@
  * shell open offline. Live data (weather, NWS, reports, map tiles) always
  * goes to the network; only the app's own files are cached.
  */
-const CACHE = "mavpulse-v17";
+const CACHE = "mavpulse-v18";
 const SHELL = [
   "./", "./index.html", "./style.css", "./script.js", "./logic.js", "./data.js", "./store.js", "./citydata.js", "./parking-areas.js", "./detours.js",
   "./firebase-config.js", "./manifest.webmanifest", "./vendor/leaflet/leaflet.js", "./vendor/leaflet/leaflet.css",
@@ -30,5 +30,10 @@ self.addEventListener("fetch", e => {
 });
 self.addEventListener("notificationclick", e => {
   e.notification.close();
-  e.waitUntil(self.clients.matchAll({ type: "window" }).then(list => list.length ? list[0].focus() : self.clients.openWindow("./")));
+  const url = (e.notification.data && e.notification.data.url) || "./";
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+    const open = list.find(c => c.url.indexOf(self.location.origin) === 0);
+    if (open) { open.focus(); if (open.navigate) return open.navigate(url); return undefined; }
+    return self.clients.openWindow(url);
+  }));
 });

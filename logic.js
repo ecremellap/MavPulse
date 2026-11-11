@@ -251,6 +251,16 @@
             lines.push({ icon: "bus", text: routesRunning ? `${routesRunning} MavMover route${routesRunning === 1 ? "" : "s"} running now` : "MavMover not running right now" });
         }
         const headline = level === "bad" ? "Heads up before you leave" : level === "warn" ? "Mostly clear, check the details" : "All clear for your commute";
+        if (input.route && input.route.length) {
+            const mine = (crossings || []).filter(c => input.route.indexOf(c.id) !== -1);
+            const hit = mine.filter(c => c.state && c.state !== "clear");
+            lines.unshift({
+                icon: "car",
+                text: hit.length
+                    ? `On your route: ${hit.map(c => `${c.name} ${c.state === "likely" ? "likely blocked" : "blocked"}`).join("; ")}`
+                    : `Your crossings are clear${mine.length ? ` (${mine.map(c => c.name).join(", ")})` : ""}`
+            });
+        }
         return { level, headline, lines };
     }
 
@@ -452,7 +462,6 @@
         return clean.charAt(0).toUpperCase() + clean.slice(1);
     }
 
-    // reports: any list of reports; profiles: { uid: { name, show } }.
     function weeklyLeaderboard(reports, profiles, now) {
         const since = now - LEADERBOARD_WINDOW_MS;
         const week = (reports || []).filter(r => r && r.at >= since && r.at <= now + MINUTE);
@@ -472,13 +481,118 @@
         return rows;
     }
 
+    // Saved commute. Direction only picks a starting set of crossings;
+    // the commuter can turn each crossing on or off after that.
+    const COMMUTE_APPROACH = {
+        west: ["bowen", "davis", "cooper"],
+        east: ["collins", "mesquite", "center"],
+        south: ["cooper", "center"]
+    };
+    const CROSSING_IDS = ["bowen", "davis", "cooper", "center", "mesquite", "collins"];
+    function defaultCommute(direction) {
+        const d = COMMUTE_APPROACH[direction] ? direction : "west";
+        return { direction: d, crossings: COMMUTE_APPROACH[d].slice(), lot: "", arriveBy: "", days: ["tue", "thu"], alertBefore: false };
+    }
+    function cleanCommute(raw) {
+        if (!raw || typeof raw !== "object") return null;
+        const direction = COMMUTE_APPROACH[raw.direction] ? raw.direction : "west";
+        const crossings = Array.isArray(raw.crossings) ? raw.crossings.filter(id => CROSSING_IDS.indexOf(id) !== -1) : COMMUTE_APPROACH[direction].slice();
+        const dayOk = { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1 };
+        const days = Array.isArray(raw.days) ? raw.days.filter(d => dayOk[d]) : ["tue", "thu"];
+        const arriveBy = typeof raw.arriveBy === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(raw.arriveBy) ? raw.arriveBy : "";
+        return { direction, crossings, lot: typeof raw.lot === "string" ? raw.lot.slice(0, 40) : "", arriveBy, days, alertBefore: !!raw.alertBefore };
+    }
+
+    // A pattern is a count of real blocked reports by hour. Under 20, say so.
+    const PATTERN_MIN_REPORTS = 20;
+    function hourLabel(mins) {
+        const h = Math.floor(mins / 60);
+        const hr = h % 12 || 12;
+        return `${hr}${h < 12 ? "a" : "p"}`;
+    }
+    function clockLabel(mins) {
+        const h = Math.floor(mins / 60), min = mins % 60;
+        const hr = h % 12 || 12;
+        const am = h < 12 ? "AM" : "PM";
+        return min ? `${hr}:${String(min).padStart(2, "0")} ${am}` : `${hr} ${am}`;
+    }
+    function crossingPattern(reports, crossingId, now) {
+        const rows = (reports || []).filter(r => r && r.type === "crossing" && r.targetId === crossingId && r.status === "blocked" && r.at <= now);
+        if (rows.length < PATTERN_MIN_REPORTS) return { enough: false, total: rows.length, need: PATTERN_MIN_REPORTS, buckets: [] };
+        const buckets = [];
+        for (let h = 6; h <= 20; h++) buckets.push({ start: h * 60, count: 0 });
+        rows.forEach(r => {
+            const d = new Date(r.at);
+            const mins = d.getHours() * 60 + d.getMinutes();
+            const b = buckets.find(x => mins >= x.start && mins < x.start + 60);
+            if (b) b.count += 1;
+        });
+        let peak = buckets[0];
+        buckets.forEach(b => { if (b.count > peak.count) peak = b; });
+        return {
+            enough: true, total: rows.length, need: PATTERN_MIN_REPORTS,
+            window: peak.count ? `${clockLabel(peak.start)}–${clockLabel(peak.start + 60)}` : "No peak yet",
+            peakCount: peak.count,
+            buckets: buckets.map(b => ({ start: b.start, label: hourLabel(b.start), count: b.count }))
+        };
+    }
+    function typicalBlockMinutes(reports, crossingId) {
+        const rows = (reports || []).filter(r => r && r.type === "crossing" && r.targetId === crossingId).slice().sort((a, b) => a.at - b.at);
+        const gaps = [];
+        rows.forEach((r, i) => {
+            if (r.status !== "blocked") return;
+            const clear = rows.slice(i + 1).find(x => x.status === "clear");
+            if (!clear) return;
+            const mins = (clear.at - r.at) / MINUTE;
+            if (mins > 0 && mins <= 40) gaps.push(mins);
+        });
+        if (gaps.length < 3) return null;
+        gaps.sort((a, b) => a - b);
+        return Math.round(gaps[Math.floor(gaps.length / 2)]);
+    }
+
+    // Notify in the 45 minutes before a saved arrival, on a saved day, for a crossing on the route.
+    function shouldAlertBefore(commute, crossing, now) {
+        if (!commute || !commute.alertBefore || !commute.arriveBy || !crossing) return false;
+        if (!commute.crossings || commute.crossings.indexOf(crossing.id) === -1) return false;
+        if (crossing.state !== "confirmed") return false;
+        const parts = commute.arriveBy.split(":");
+        const hh = Number(parts[0]), mm = Number(parts[1]);
+        if (!Number.isFinite(hh) || !Number.isFinite(mm)) return false;
+        const d = new Date(now);
+        const keys = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+        if (commute.days && commute.days.length && commute.days.indexOf(keys[d.getDay()]) === -1) return false;
+        const arrive = new Date(d);
+        arrive.setHours(hh, mm, 0, 0);
+        const lead = arrive.getTime() - now;
+        return lead >= 0 && lead <= 45 * MINUTE;
+    }
+
+    // Hand the mapped detour to a maps app. Miles and minutes come from the
+    // route length at about 20 mph, not from live traffic.
+    function detourHandoff(detour) {
+        if (!detour || !detour.path || detour.path.length < 2 || !detour.via) return null;
+        const start = detour.path[0], end = detour.path[detour.path.length - 1];
+        const s = `${start[0]},${start[1]}`, e = `${end[0]},${end[1]}`, v = `${detour.via.lat},${detour.via.lng}`;
+        const miles = Math.round((detour.meters / 1609.344) * 10) / 10;
+        const minutes = Math.max(1, Math.round(detour.meters / (20 * 1609.344 / 60)));
+        return {
+            via: detour.via.name, miles, minutes,
+            note: "About, from the length of this route at 20 mph. Not live traffic. MavPulse does not give turn-by-turn directions.",
+            apple: `https://maps.apple.com/?saddr=${s}&daddr=${v}&daddr=${e}&dirflg=d`,
+            google: `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(s)}&destination=${encodeURIComponent(e)}&waypoints=${encodeURIComponent(v)}&travelmode=driving`,
+            waze: `https://www.waze.com/ul?from=${encodeURIComponent(s)}&to=${encodeURIComponent(e)}&navigate=yes`
+        };
+    }
+
     const LOGIC = {
         RULES, shouldConfirmCrossingAlert, crossingState, createClosureReport, activeReports,
         activeClosures, latestStatus, canReport, studyStatus, routeStatus, filterCampusAlerts, shouldNotify, contributorStats,
         buildBrief, minutesAgo, distanceMeters, nearest,
         activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards,
         TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute,
-        LEADERBOARD_WINDOW_MS, isUtaEmail, isAccountEmail, profileIsUta, cleanDisplayName, weeklyLeaderboard
+        LEADERBOARD_WINDOW_MS, isUtaEmail, isAccountEmail, profileIsUta, cleanDisplayName, weeklyLeaderboard,
+        defaultCommute, cleanCommute, crossingPattern, typicalBlockMinutes, shouldAlertBefore, detourHandoff, PATTERN_MIN_REPORTS
     };
     root.MP = LOGIC;
     // Back-compat names used by the Iteration 2 tests.
