@@ -37,8 +37,9 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 | Morning brief | All of the above | Live |
 | Notifications: Commuter / Quiet / Off | Browser notifications | Live |
 | Contributor points and levels | Crowd reports | Live |
+| Accounts: any verified email can sign in. `@mavs.uta.edu` and `@uta.edu` rank on the UTA board; every other address ranks on a separate board | Firebase Auth | Live, shared |
 | Admins: post official campus updates, remove bad reports | Firebase Auth + `/admins` allowlist | Live |
-| Test mode: simulate a train | Local only | For testing the 30-second requirement |
+| Test mode: simulate a train | Local only | Hidden. Open the app with `?demo=1`, or sign in as an admin |
 
 "Shared" means reports sync to every user in real time through Firebase (Firestore). Without a Firebase config the app runs in on-device mode with the same features.
 
@@ -54,24 +55,26 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 | `relay/worker.js` | Cloudflare Worker that lets the app read TripShot's public bus feed (CORS) |
 | `store.js` | `ReportStore` interface with two implementations: `FirebaseReportStore` (shared) and `LocalReportStore` (fallback). The UI only knows the interface. |
 | `script.js` | UI wiring for the five tabs, map layers and settings |
-| `firestore.rules` | Server-side security: report shape validation, only reporters/admins can delete, only admins post updates, nobody can make themselves admin |
+| `firestore.rules` | Server-side security: report shape validation, only reporters/admins can delete, only admins post updates, nobody can make themselves admin. A profile can be saved only after the email is verified, and its UTA flag must match that email. |
 | `sw.js`, `manifest.webmanifest` | Installable PWA + offline app shell |
-| `tests.js`, `tests.html` | 76 automated tests |
+| `tests.js`, `tests.html` | 86 automated tests |
 
 ## Run and test
 
 No build step. Serve the folder with any static server, e.g. `python3 -m http.server`, then open `http://localhost:8000`.
 
 ```
-node tests.js        # 76 / 76 tests passed
+node tests.js        # 86 / 86 tests passed
 ```
 
 ## Shared backend setup (Firebase)
 
 1. Create a Firebase project, enable Firestore and Authentication (Anonymous + Email/Password).
 2. Put the web app config in `firebase-config.js`.
-3. Paste `firestore.rules` into Firestore → Rules → Publish.
+3. Paste `firestore.rules` into Firestore → Rules → Publish. Do this again after the accounts change: non-UTA users can sign in before the new rules are published, but saving a name fails until they are.
 4. To add an admin: create their Email/Password user in Authentication, copy the UID, and create a Firestore document `admins/<UID>`.
+
+The map opens with rail crossings, closures, and your dot. Parking, safety, shuttles, weather alerts, road work, and study stay off until those chips are tapped. Home leads with the commute brief; weather, city road work, and campus updates sit under See more.
 
 ## Sources
 

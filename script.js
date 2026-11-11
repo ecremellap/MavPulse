@@ -1202,6 +1202,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         $("admin-panel").hidden = !store.isAdmin;
         if (store.isAdmin) $("admin-who").textContent = store.adminEmail || "admin";
         if (state.mode !== "shared") $("admin-msg").textContent = "Admin features need the shared backend (currently on-device mode).";
+        const demo = new URLSearchParams(location.search).get("demo") === "1";
+        $("test-mode").hidden = !(demo || store.isAdmin);
     }
     $("admin-form").addEventListener("submit", async e => {
         e.preventDefault();

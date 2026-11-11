@@ -100,29 +100,8 @@
                 <p class="section-hint">Stopped by a train? Tap once. A second report confirms it for everyone.</p>
                 <div class="signal-board" id="crossing-list" aria-live="polite"></div>
 
-                <h2 class="section-title">Weather</h2>
-                <div class="nws-alert-status" id="nws-alert-status" aria-live="polite">Checking the National Weather Service…</div>
-                <div id="nws-alert-list" class="nws-alert-list"><div class="skeleton short"></div></div>
-
-                <div class="weather-strip" id="weather-strip">
-                    <div class="weather-strip-icon" id="current-weather-icon" aria-hidden="true"><svg class="i"><use href="#i-partly"/></svg></div>
-                    <div class="weather-strip-main">
-                        <div><strong id="current-temperature">--</strong>° <span id="current-condition">Loading weather</span></div>
-                        <div class="weather-strip-sub" id="weather-sub">UTA campus · Open-Meteo</div>
-                        <div class="weather-strip-sub" id="weather-updated"></div>
-                    </div>
-                    <button class="icon-btn light" id="weather-refresh" type="button" aria-label="Refresh weather"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg></button>
-                </div>
-
                 <h2 class="section-title">Closures reported by commuters</h2>
                 <div id="closure-list" class="report-list"></div>
-
-                <h2 class="section-title">City road work</h2>
-                <p class="section-hint">Barricaded work zones from the City of Arlington's permit data.</p>
-                <div id="roadwork-list" class="report-list"><div class="skeleton"></div><div class="skeleton short"></div></div>
-
-                <h2 class="section-title">Campus updates</h2>
-                <div id="update-list" class="report-list"></div>
 
                 <div class="emergency-card">
                     <div class="emergency-title">UTA emergency alerts</div>
@@ -133,6 +112,30 @@
                         <a class="pill-btn" id="link-hotline">Call emergency info line</a>
                     </div>
                 </div>
+
+                <details class="more-fold" id="home-more">
+                    <summary>See more</summary>
+                    <h2 class="section-title">Weather</h2>
+                    <div class="nws-alert-status" id="nws-alert-status" aria-live="polite">Checking the National Weather Service…</div>
+                    <div id="nws-alert-list" class="nws-alert-list"><div class="skeleton short"></div></div>
+
+                    <div class="weather-strip" id="weather-strip">
+                        <div class="weather-strip-icon" id="current-weather-icon" aria-hidden="true"><svg class="i"><use href="#i-partly"/></svg></div>
+                        <div class="weather-strip-main">
+                            <div><strong id="current-temperature">--</strong>° <span id="current-condition">Loading weather</span></div>
+                            <div class="weather-strip-sub" id="weather-sub">UTA campus · Open-Meteo</div>
+                            <div class="weather-strip-sub" id="weather-updated"></div>
+                        </div>
+                        <button class="icon-btn light" id="weather-refresh" type="button" aria-label="Refresh weather"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg></button>
+                    </div>
+
+                    <h2 class="section-title">City road work</h2>
+                    <p class="section-hint">Barricaded work zones from the City of Arlington's permit data.</p>
+                    <div id="roadwork-list" class="report-list"><div class="skeleton"></div><div class="skeleton short"></div></div>
+
+                    <h2 class="section-title">Campus updates</h2>
+                    <div id="update-list" class="report-list"></div>
+                </details>
             </div>
         </section>
 
@@ -145,10 +148,10 @@
             <div class="filter-bar" aria-label="Map layers">
                 <button class="filter-chip active" type="button" data-layer="crossings" aria-pressed="true">Crossings</button>
                 <button class="filter-chip active" type="button" data-layer="closures" aria-pressed="true">Closures</button>
-                <button class="filter-chip active" type="button" data-layer="alerts" aria-pressed="true">Weather alerts</button>
-                <button class="filter-chip active" type="button" data-layer="roadwork" aria-pressed="true">City road work</button>
+                <button class="filter-chip" type="button" data-layer="alerts" aria-pressed="false">Weather alerts</button>
+                <button class="filter-chip" type="button" data-layer="roadwork" aria-pressed="false">City road work</button>
                 <button class="filter-chip" type="button" data-layer="safety" aria-pressed="false">Safety</button>
-                <button class="filter-chip active" type="button" data-layer="parking" aria-pressed="true">Parking</button>
+                <button class="filter-chip" type="button" data-layer="parking" aria-pressed="false">Parking</button>
                 <button class="filter-chip" type="button" data-layer="shuttles" aria-pressed="false">Shuttles</button>
                 <button class="filter-chip" type="button" data-layer="study" aria-pressed="false">Study</button>
             </div>
@@ -158,7 +161,7 @@
             </div>
             <div class="hazard-banner" id="hazard-banner" hidden></div>
             <div class="safety-card" id="safety-card" hidden></div>
-            <section class="parking-panel" id="parking-panel" aria-labelledby="parking-title">
+            <section class="parking-panel" id="parking-panel" hidden aria-labelledby="parking-title">
                 <div class="parking-head">
                     <h2 class="section-title" id="parking-title">UTA parking</h2>
                     <button class="small-btn" id="parking-fit" type="button">Show all on map</button>
@@ -335,11 +338,13 @@
             <p class="section-hint">iPhone: Safari → Share → <b>Add to Home Screen</b>. Android: Chrome → ⋮ → <b>Install app</b>. No app store needed.</p>
             <button class="small-btn" id="install-btn" type="button" hidden>Install MavPulse</button>
 
+            <div id="test-mode" hidden>
             <h3>Test mode</h3>
             <p class="section-hint">Simulates a train at a crossing (two fake reporters) so the 30-second alert requirement can be tested without a real train. Simulated reports stay on this device only.</p>
             <select id="sim-crossing" class="big-select" aria-label="Crossing to simulate"></select>
             <button class="small-btn" id="sim-train" type="button">Simulate a train</button>
             <div class="form-msg" id="sim-msg" aria-live="polite"></div>
+            </div>
 
             <h3>Admins</h3>
             <div id="admin-area">

@@ -1483,6 +1483,29 @@ body {
 .tab-bar { padding-bottom: max(6px, env(safe-area-inset-bottom)); }
 .map-canvas { height: min(52vh, 520px); min-height: 300px; }
 
+.more-fold { margin-top: 6px; }
+.more-fold summary {
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--mav-blue);
+    list-style: none;
+    padding: 14px 0 4px;
+}
+.more-fold summary::-webkit-details-marker { display: none; }
+.more-fold summary::after {
+    content: "";
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-left: 8px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(45deg) translateY(-2px);
+}
+.more-fold[open] summary::after { transform: rotate(225deg) translateY(-1px); }
+#test-mode[hidden] { display: none; }
+
 /* UTA vs other accounts */
 .kind-seg { margin: 0 0 8px; }
 .lb-label { font-size: 13px; font-weight: 800; color: var(--ink-2); margin: 12px 0 6px; letter-spacing: 0.02em; }
