@@ -280,11 +280,20 @@
             <div class="points-card" id="profile-points"></div>
 
             <h3>Weekly leaderboard</h3>
-            <ol class="leaderboard" id="leaderboard" aria-label="Top reporters this week"></ol>
+            <p class="section-hint">UTA emails and other accounts are ranked on separate boards.</p>
+            <h4 class="lb-label">UTA</h4>
+            <ol class="leaderboard" id="leaderboard" aria-label="UTA reporters this week"></ol>
+            <h4 class="lb-label">Other</h4>
+            <ol class="leaderboard" id="leaderboard-other" aria-label="Other reporters this week"></ol>
 
             <div class="account-card" id="account-card">
                 <div id="acct-anon">
-                    <p class="section-hint"><b>Reporting never needs an account.</b> Sign in with your UTA email to put your first name on the board and keep your points on any device.</p>
+                    <p class="section-hint"><b>Reporting never needs an account.</b> Create one to put your first name on a board and keep your points on any device.</p>
+                    <div class="seg kind-seg" role="radiogroup" aria-label="Account type" id="acct-kind">
+                        <button type="button" data-kind="uta" class="on" aria-checked="true">UTA</button>
+                        <button type="button" data-kind="other" aria-checked="false">Other</button>
+                    </div>
+                    <p class="section-hint" id="acct-kind-help">Use your @mavs.uta.edu or @uta.edu email. You rank on the UTA board.</p>
                     <form id="acct-form" class="admin-form" autocomplete="on">
                         <input type="text" id="acct-name" placeholder="First name (shown on the board)" autocomplete="given-name" maxlength="20">
                         <input type="email" id="acct-email" placeholder="you@mavs.uta.edu" autocomplete="username" required>
@@ -296,17 +305,17 @@
                     </form>
                 </div>
                 <div id="acct-verify" hidden>
-                    <p class="section-hint"><b>Check your UTA inbox.</b> We sent a link to <b id="acct-verify-email"></b>. Tap it, then come back here. You can keep reporting meanwhile; your points are saved. (Not there? Check Junk.)</p>
+                    <p class="section-hint"><span class="kind-badge" id="acct-badge-verify">UTA</span> <b>Check your inbox.</b> We sent a link to <b id="acct-verify-email"></b>. Tap it, then come back here. You can keep reporting meanwhile; your points are saved. (Not there? Check Junk.)</p>
                     <div class="acct-btns">
                         <button class="small-btn" id="acct-check" type="button">I verified it</button>
                         <button class="text-btn" id="acct-resend" type="button">Resend the link</button>
                     </div>
                 </div>
                 <div id="acct-done" hidden>
-                    <p class="section-hint">Signed in as <b id="acct-who"></b></p>
+                    <p class="section-hint">Signed in as <span class="kind-badge" id="acct-badge">UTA</span> <b id="acct-who"></b></p>
                     <form id="profile-form" class="admin-form">
                         <input type="text" id="profile-name" placeholder="First name" maxlength="20" required>
-                        <label class="check-row"><input type="checkbox" id="profile-show" checked> Show me on the weekly leaderboard</label>
+                        <label class="check-row"><input type="checkbox" id="profile-show" checked> <span id="profile-show-label">Show me on the UTA leaderboard</span></label>
                         <button class="small-btn" type="submit">Save</button>
                     </form>
                 </div>

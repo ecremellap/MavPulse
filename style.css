@@ -1452,3 +1452,41 @@ button:active, .tripshot-card:active, a.pill-btn:active { transform: scale(0.96)
 .route-line li.bus-next::before { background: var(--route, #999); }
 .stop-bus { display: block; font-size: 11.5px; font-weight: 700; color: var(--signal-green); }
 .route-card .bus-row:first-of-type { padding-top: 8px; }
+
+/* Product shell: fill the window. No device bezel. */
+body {
+    background: #d5dee8;
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: 0;
+}
+.phone-container {
+    width: min(480px, 100%);
+    height: 100vh;
+    height: 100dvh;
+    background: var(--paper);
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+}
+.phone-screen { border-radius: 0; background: var(--paper); }
+@media (min-width: 900px) {
+    .phone-container {
+        box-shadow: 0 0 0 1px rgba(15, 30, 51, 0.08), 0 24px 60px rgba(15, 30, 51, 0.12);
+    }
+}
+.icon-btn { width: 40px; height: 40px; }
+.tab-bar { padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+.map-canvas { height: min(52vh, 520px); min-height: 300px; }
+
+/* UTA vs other accounts */
+.kind-seg { margin: 0 0 8px; }
+.lb-label { font-size: 13px; font-weight: 800; color: var(--ink-2); margin: 12px 0 6px; letter-spacing: 0.02em; }
+.kind-badge { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: 0.03em; vertical-align: 1px; margin-right: 4px; }
+.kind-badge.uta { background: var(--mav-blue); color: #fff; }
+.kind-badge.other { background: #e6edf5; color: var(--ink); }
+

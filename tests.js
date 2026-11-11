@@ -346,6 +346,21 @@
     // ===================== Weekly leaderboard + UTA sign-in =====================
     const WEEKDAY = 24 * 60 * 60 * 1000;
     const rep = (uid, target, at, status) => ({ type: "crossing", targetId: target, status: status || "blocked", reporterId: uid, at });
+    test("Account email: any normal address is accepted", () => {
+        eq(MP.isAccountEmail("me@gmail.com"), true);
+        eq(MP.isAccountEmail("abc1234@mavs.uta.edu"), true);
+        eq(MP.isAccountEmail("  Friend@Example.com "), true);
+        eq(MP.isAccountEmail("not-an-email"), false);
+        eq(MP.isAccountEmail("me@"), false);
+        eq(MP.isAccountEmail(""), false);
+        eq(MP.isAccountEmail("a@b"), false);
+    });
+    test("Profile group: missing uta flag stays on the UTA board; false is other", () => {
+        eq(MP.profileIsUta({ name: "Ana" }), true);
+        eq(MP.profileIsUta({ name: "Ana", uta: true }), true);
+        eq(MP.profileIsUta({ name: "Sam", uta: false }), false);
+        eq(MP.profileIsUta(null), false);
+    });
     test("UTA email: mavs.uta.edu and uta.edu accepted, others rejected", () => {
         eq(MP.isUtaEmail("abc1234@mavs.uta.edu"), true); eq(MP.isUtaEmail("Prof@UTA.edu"), true);
         eq(MP.isUtaEmail("me@gmail.com"), false); eq(MP.isUtaEmail("me@uta.edu.evil.com"), false);

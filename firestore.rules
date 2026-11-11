@@ -4,7 +4,7 @@ rules_version = '2';
 // - Only signed-in users (anonymous accounts are created automatically)
 //   can create reports, only as themselves, only with the allowed shape.
 // - Nobody can edit a report; the reporter or an admin can delete it.
-// - Leaderboard profiles: written only by their owner with a verified UTA email.
+// - Leaderboard profiles: written only by their owner with any verified email.
 // - Admins are users with a document at /admins/{uid}. Only the team can
 //   create those (Firebase console), so nobody can make themselves admin.
 service cloud.firestore {
@@ -45,19 +45,26 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     // Leaderboard names. Only the owner can write their own profile, and only
-    // after verifying a UTA email (@mavs.uta.edu or @uta.edu).
-    function verifiedUta() {
+    // after verifying the email they signed up with.
+    function verifiedAccount() {
       return request.auth != null
         && request.auth.token.email_verified == true
-        && request.auth.token.email.lower().matches('.*@(mavs[.])?uta[.]edu');
+        && request.auth.token.email.size() >= 6
+        && request.auth.token.email.size() <= 120
+        && request.auth.token.email.lower().matches('^[^@ ]+@[^@ ]+[.][^@ ]+$');
+    }
+    function emailIsUta() {
+      return request.auth.token.email.lower().matches('.*@(mavs[.])?uta[.]edu');
     }
     match /profiles/{uid} {
       allow read: if true;
-      allow create, update: if verifiedUta() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['name','show','at'])
+      allow create, update: if verifiedAccount() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name','show','uta','at'])
         && request.resource.data.name is string
         && request.resource.data.name.size() >= 1 && request.resource.data.name.size() <= 20
         && request.resource.data.show is bool
+        && request.resource.data.uta is bool
+        && request.resource.data.uta == emailIsUta()
         && request.resource.data.at is int;
       allow delete: if request.auth != null && request.auth.uid == uid;
     }

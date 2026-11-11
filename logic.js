@@ -422,13 +422,25 @@
 
     // =================================================================
     //  Weekly leaderboard (asked for by commuter students).
-    //  Only people who signed in with a verified UTA email and chose to be
-    //  shown appear; everyone else still earns points anonymously.
+    //  Anyone who verifies an email and chooses to be shown appears.
+    //  Everyone else still earns points anonymously.
     // =================================================================
     const LEADERBOARD_WINDOW_MS = 7 * 24 * 60 * MINUTE;
 
     function isUtaEmail(email) {
         return typeof email === "string" && /^[^@\s]+@(mavs\.)?uta\.edu$/i.test(email.trim());
+    }
+
+    // Any normal email can create an account. UTA addresses still count via isUtaEmail.
+    function isAccountEmail(email) {
+        if (typeof email !== "string") return false;
+        const v = email.trim();
+        return v.length >= 6 && v.length <= 120 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+    }
+
+    // Profiles saved before the split have no `uta` field; those accounts were UTA-only.
+    function profileIsUta(profile) {
+        return !!(profile && profile.uta !== false);
     }
 
     // First name only, letters plus ' and -, at most 20 characters.
@@ -466,7 +478,7 @@
         buildBrief, minutesAgo, distanceMeters, nearest,
         activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards,
         TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute,
-        LEADERBOARD_WINDOW_MS, isUtaEmail, cleanDisplayName, weeklyLeaderboard
+        LEADERBOARD_WINDOW_MS, isUtaEmail, isAccountEmail, profileIsUta, cleanDisplayName, weeklyLeaderboard
     };
     root.MP = LOGIC;
     // Back-compat names used by the Iteration 2 tests.

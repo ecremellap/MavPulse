@@ -20,7 +20,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const state = {
         reports: [],          // from the store
         weekReports: null,    // last 7 days (shared mode), for points + leaderboard
-        profiles: {},         // leaderboard names (verified UTA accounts)
+        profiles: {},         // leaderboard names (verified accounts)
         simReports: [],       // test-mode only, never leave this device
         updates: [],
         weather: null,
@@ -914,8 +914,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ======================================================================
     function renderPoints() {
         const s = MP.contributorStats(state.weekReports || state.reports, state.uid);
-        const board = MP.weeklyLeaderboard(state.weekReports || [], state.profiles, now());
-        const mine = board.find(r => r.uid === state.uid);
+        const reports = state.weekReports || [];
+        const board = MP.weeklyLeaderboard(reports, profilesInGroup(state.profiles, true), now());
+        const other = MP.weeklyLeaderboard(reports, profilesInGroup(state.profiles, false), now());
+        const mine = board.find(r => r.uid === state.uid) || other.find(r => r.uid === state.uid);
         const today = MP.activeReports(state.reports, now(), 24 * 60 * MIN);
         const people = new Set(today.map(r => r.reporterId)).size;
         const html = card => {
@@ -930,27 +932,38 @@ document.addEventListener("DOMContentLoaded", async () => {
             bar.appendChild(fillEl); card.appendChild(bar);
             card.appendChild(el("div", "points-sub", `${s.reports} report${s.reports === 1 ? "" : "s"} · ${s.confirmed} backed up by another commuter (+5 each)`));
             card.appendChild(el("div", "points-sub", `Community today: ${today.length} report${today.length === 1 ? "" : "s"} from ${people} commuter${people === 1 ? "" : "s"}`));
-            if (mine) card.appendChild(el("div", "points-sub rank", `#${mine.rank} on this week's leaderboard`));
-            else if (state.mode === "shared" && !(store && store.account)) card.appendChild(el("div", "points-sub rank", "Sign in with your UTA email under Profile to join the weekly leaderboard"));
+            const onUta = board.some(r => r.uid === state.uid);
+            if (mine) card.appendChild(el("div", "points-sub rank", `#${mine.rank} on the ${onUta ? "UTA" : "other"} board`));
+            else if (state.mode === "shared" && !(store && store.account)) card.appendChild(el("div", "points-sub rank", "Sign in under Profile. UTA and other emails have separate boards"));
         };
         html($("points-card"));
         html($("profile-points"));
-        renderLeaderboard(board);
+        renderLeaderboard($("leaderboard"), board, "UTA");
+        renderLeaderboard($("leaderboard-other"), other, "other");
+    }
+
+    function profilesInGroup(profiles, wantUta) {
+        const out = {};
+        Object.keys(profiles || {}).forEach(uid => {
+            if (MP.profileIsUta(profiles[uid]) === wantUta) out[uid] = profiles[uid];
+        });
+        return out;
     }
 
     // ======================================================================
-    //  WEEKLY LEADERBOARD + OPTIONAL UTA SIGN-IN
+    //  WEEKLY LEADERBOARD + OPTIONAL SIGN-IN
     // ======================================================================
-    function renderLeaderboard(board) {
-        const list = $("leaderboard");
+    function renderLeaderboard(list, board, label) {
         if (!list) return;
         list.innerHTML = "";
         if (state.mode !== "shared") {
-            list.appendChild(el("li", "lb-empty", "The leaderboard appears when the shared backend is connected."));
+            list.appendChild(el("li", "lb-empty", "Boards appear when the shared backend is connected."));
             return;
         }
         if (!board.length) {
-            list.appendChild(el("li", "lb-empty", "Nobody on the board yet this week. Report something and sign in with your UTA email to be first."));
+            list.appendChild(el("li", "lb-empty", label === "UTA"
+                ? "No UTA names yet this week."
+                : "No other accounts on the board yet this week."));
             return;
         }
         const row = r => {
@@ -981,11 +994,40 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (acct && !acct.verified) $("acct-verify-email").textContent = acct.email;
         if (acct && acct.verified) {
             const p = state.profiles[state.uid];
+            const uta = !!acct.uta;
+            setKindBadge($("acct-badge"), uta);
             $("acct-who").textContent = (p && p.name ? p.name + " · " : "") + acct.email;
+            $("profile-show-label").textContent = uta ? "Show me on the UTA leaderboard" : "Show me on the other leaderboard";
             if (document.activeElement !== $("profile-name")) $("profile-name").value = (p && p.name) || pendingName() || "";
             $("profile-show").checked = !p || p.show !== false;
         }
+        if (acct && !acct.verified) setKindBadge($("acct-badge-verify"), !!acct.uta);
     }
+    function setKindBadge(node, uta) {
+        if (!node) return;
+        node.textContent = uta ? "UTA" : "Other";
+        node.classList.toggle("uta", uta);
+        node.classList.toggle("other", !uta);
+    }
+    let acctKind = "uta";
+    function renderAcctKind() {
+        document.querySelectorAll("#acct-kind button").forEach(b => {
+            const on = b.dataset.kind === acctKind;
+            b.classList.toggle("on", on);
+            b.setAttribute("aria-checked", String(on));
+        });
+        const uta = acctKind === "uta";
+        $("acct-kind-help").textContent = uta
+            ? "Use your @mavs.uta.edu or @uta.edu email. You rank on the UTA board."
+            : "Any other email. You rank on the other board, separate from UTA.";
+        $("acct-email").placeholder = uta ? "you@mavs.uta.edu" : "you@email.com";
+    }
+    document.querySelectorAll("#acct-kind button").forEach(b => b.addEventListener("click", () => {
+        acctKind = b.dataset.kind;
+        renderAcctKind();
+        $("acct-msg").textContent = "";
+    }));
+    renderAcctKind();
     async function afterVerified() {
         const name = pendingName();
         if (name && !state.profiles[state.uid]) {
@@ -998,19 +1040,27 @@ document.addEventListener("DOMContentLoaded", async () => {
         e.preventDefault();
         const email = $("acct-email").value.trim(), pass = $("acct-pass").value;
         const name = MP.cleanDisplayName($("acct-name").value);
-        if (!MP.isUtaEmail(email)) { $("acct-msg").textContent = "Use your @mavs.uta.edu or @uta.edu email."; return; }
+        if (!MP.isAccountEmail(email)) { $("acct-msg").textContent = "Enter a valid email address."; return; }
+        const emailIsUta = MP.isUtaEmail(email);
+        if (acctKind === "uta" && !emailIsUta) { $("acct-msg").textContent = "That isn't a UTA email. Switch to Other, or use @mavs.uta.edu / @uta.edu."; return; }
+        if (acctKind === "other" && emailIsUta) { $("acct-msg").textContent = "That's a UTA email. Switch to UTA."; return; }
         if (acctAction === "signup" && !name) { $("acct-msg").textContent = "Add your first name for the leaderboard."; return; }
         $("acct-msg").textContent = acctAction === "signup" ? "Creating your account…" : "Signing in…";
         try {
             if (acctAction === "signup") {
                 pendingName(name);
                 await store.utaSignUp(email, pass);
-                $("acct-msg").textContent = "Almost there: check your UTA inbox for the link.";
+                $("acct-msg").textContent = emailIsUta
+                    ? "Almost there: check your inbox. You'll be on the UTA board."
+                    : "Almost there: check your inbox. You'll be on the other board.";
             } else {
                 await store.utaSignIn(email, pass);
                 if (name) pendingName(name);
                 if (store.account && store.account.verified) await afterVerified();
-                $("acct-msg").textContent = store.account && store.account.verified ? "Signed in. Your points follow you." : "Signed in. Verify your email to join the board.";
+                const uta = store.account && store.account.uta;
+                $("acct-msg").textContent = store.account && store.account.verified
+                    ? `Signed in on the ${uta ? "UTA" : "other"} board. Your points follow you.`
+                    : "Signed in. Verify your email to join your board.";
             }
             $("acct-pass").value = "";
             state.uid = store.uid;
@@ -1021,7 +1071,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         $("acct-msg").textContent = "Checking…";
         try {
             const ok = await store.checkVerified();
-            if (ok) { await afterVerified(); $("acct-msg").textContent = "Verified. You're on the weekly leaderboard."; toast("You're on the leaderboard", "ok"); }
+            if (ok) { await afterVerified(); const uta = store.account && store.account.uta; $("acct-msg").textContent = `Verified. You're on the ${uta ? "UTA" : "other"} board.`; toast("You're on the leaderboard", "ok"); }
             else $("acct-msg").textContent = "Not verified yet. Tap the link in the email, then try again.";
         } catch (err) { $("acct-msg").textContent = err.message || "Couldn't check right now."; }
         renderAccount(); renderAll();
@@ -1035,7 +1085,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             const n = await store.saveProfile({ name: $("profile-name").value, show: $("profile-show").checked });
             pendingName(null);
-            $("acct-msg").textContent = $("profile-show").checked ? `Saved. You're on the board as ${n}.` : "Saved. You're hidden from the board.";
+            const where = store.account && store.account.uta ? "UTA" : "other";
+            $("acct-msg").textContent = $("profile-show").checked ? `Saved. You're on the ${where} board as ${n}.` : "Saved. You're hidden from the board.";
         } catch (err) { $("acct-msg").textContent = err.message; }
     });
     $("profile-show").addEventListener("change", () => $("profile-form").requestSubmit());

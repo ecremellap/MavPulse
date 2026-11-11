@@ -29,16 +29,17 @@
  *   adminSignIn(email, pw)   -> Promise<{ isAdmin }>
  *   adminSignOut()           -> Promise
  *   account                  { email, verified, uta } or null (anonymous)
- *   utaSignUp(email, pw)     link this anonymous account to a UTA email,
+ *   utaSignUp(email, pw)     link this anonymous account to any email,
  *                            so the uid (and its points) carry over; sends
- *                            a verification email
+ *                            a verification email. `uta` stays true for
+ *                            @mavs.uta.edu and @uta.edu addresses.
  *   utaSignIn(email, pw)     sign in on another device
  *   resendVerification()     -> Promise
  *   checkVerified()          -> Promise<boolean>  (refreshes the token)
  *   utaSignOut()             back to a fresh anonymous account
  *   onWeekReports(cb)        reports from the last 7 days (leaderboard)
  *   onProfiles(cb)           { uid: { name, show } } for the leaderboard
- *   saveProfile({name,show}) verified UTA accounts only (firestore.rules)
+ *   saveProfile({name,show}) verified email accounts only (firestore.rules)
  */
 (function (root) {
     "use strict";
@@ -93,9 +94,9 @@
         async adminSignIn() { throw new Error("Admin sign-in needs the shared backend."); }
         async adminSignOut() { this.isAdmin = false; }
         get account() { return null; }
-        async utaSignUp() { throw new Error("UTA sign-in needs the shared backend."); }
-        async utaSignIn() { throw new Error("UTA sign-in needs the shared backend."); }
-        async resendVerification() { throw new Error("UTA sign-in needs the shared backend."); }
+        async utaSignUp() { throw new Error("Sign-in needs the shared backend."); }
+        async utaSignIn() { throw new Error("Sign-in needs the shared backend."); }
+        async resendVerification() { throw new Error("Sign-in needs the shared backend."); }
         async checkVerified() { return false; }
         async utaSignOut() { }
         onWeekReports(cb) { this.reportListeners.push(cb); cb(this._reports()); }
@@ -192,8 +193,8 @@
         get account() { return this._account || null; }
         _friendly(e) {
             const map = {
-                "auth/email-already-in-use": "That UTA email already has an account. Use Sign in instead.",
-                "auth/credential-already-in-use": "That UTA email already has an account. Use Sign in instead.",
+                "auth/email-already-in-use": "That email already has an account. Use Sign in instead.",
+                "auth/credential-already-in-use": "That email already has an account. Use Sign in instead.",
                 "auth/weak-password": "Pick a password with at least 6 characters.",
                 "auth/invalid-email": "That doesn't look like an email address.",
                 "auth/wrong-password": "Wrong email or password.",
@@ -207,7 +208,7 @@
         }
         async utaSignUp(email, password) {
             email = String(email || "").trim().toLowerCase();
-            if (!MPL().isUtaEmail(email)) throw new Error("Use your @mavs.uta.edu or @uta.edu email.");
+            if (!MPL().isAccountEmail(email)) throw new Error("Enter a valid email address.");
             const fb = root.firebase;
             const cred = fb.auth.EmailAuthProvider.credential(email, password);
             try {
@@ -221,7 +222,7 @@
         }
         async utaSignIn(email, password) {
             email = String(email || "").trim().toLowerCase();
-            if (!MPL().isUtaEmail(email)) throw new Error("Use your @mavs.uta.edu or @uta.edu email.");
+            if (!MPL().isAccountEmail(email)) throw new Error("Enter a valid email address.");
             try { await this.auth.signInWithEmailAndPassword(email, password); }
             catch (e) { throw this._friendly(e); }
             await this._refreshRole();
@@ -253,8 +254,10 @@
         async saveProfile({ name, show }) {
             const clean = MPL().cleanDisplayName(name);
             if (!clean) throw new Error("Add your first name for the leaderboard.");
-            if (!this.account || !this.account.verified || !this.account.uta) throw new Error("Verify your UTA email first.");
-            await this.db.collection("profiles").doc(this.uid).set({ name: clean, show: show !== false, at: Date.now() });
+            if (!this.account || !this.account.verified) throw new Error("Verify your email first.");
+            await this.db.collection("profiles").doc(this.uid).set({
+                name: clean, show: show !== false, uta: !!this.account.uta, at: Date.now()
+            });
             return clean;
         }
     }
