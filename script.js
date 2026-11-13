@@ -911,55 +911,41 @@ document.addEventListener("DOMContentLoaded", async () => {
             }))
         };
     }
-    let lockNoteKey = loadPref("mavpulse-lock-key", "");
-    function renderLiveStatus() {
-        const bar = $("live-status");
-        if (!bar) return;
-        const info = MP.commuterBar(commuterNoteInput());
-        if (!info || document.hidden) { bar.hidden = true; return; }
-        bar.hidden = false;
-        bar.dataset.level = info.level;
-        bar.dataset.crossing = info.crossingId || "";
-        $("live-status-title").textContent = info.title;
-        $("live-status-sub").textContent = info.sub;
-    }
-    $("live-status").addEventListener("click", () => {
-        const id = $("live-status").dataset.crossing;
-        if (id) openDetour(id);
-        else switchView("home");
-    });
-    async function syncLockNote() {
-        const info = MP.commuterBar(commuterNoteInput());
-        const action = MP.shouldPostLockNote(lockNoteKey, info);
-        if (action === "skip") return;
-        if (!("Notification" in window) || Notification.permission !== "granted" || !navigator.serviceWorker) return;
-        // While the app is open the bar carries the status. One lock-screen
-        // notice is posted only when that status actually changes.
-        if (action === "post" && !document.hidden) return;
-        const prev = lockNoteKey;
-        lockNoteKey = info ? info.key : "";
-        savePref("mavpulse-lock-key", lockNoteKey);
-        let reg;
-        try { reg = await navigator.serviceWorker.ready; } catch (e) { return; }
-        if (!reg) return;
-        if (action === "close") {
-            try { (await reg.getNotifications({ tag: "mavpulse-lock" })).forEach(n => n.close()); } catch (e) { /* ignore */ }
-            return;
-        }
+    let shownLockKey = "";
+    async function closeLockNote() {
+        shownLockKey = "";
+        if (!navigator.serviceWorker) return;
         try {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (!reg) return;
+            (await reg.getNotifications({ tag: "mavpulse-lock" })).forEach(n => n.close());
+        } catch (e) { /* ignore */ }
+    }
+    async function syncLockNote() {
+        if (!document.hidden) return;
+        const info = state.notifyMode === "commuter" ? MP.commuterBar(commuterNoteInput()) : null;
+        const action = MP.shouldPostLockNote(shownLockKey, info);
+        if (action === "skip") return;
+        if (action === "close") { closeLockNote(); return; }
+        if (!("Notification" in window) || Notification.permission !== "granted" || !navigator.serviceWorker) return;
+        const prev = shownLockKey;
+        shownLockKey = info.key;
+        try {
+            const reg = await navigator.serviceWorker.ready;
             await reg.showNotification(info.title, {
                 body: info.sub,
                 tag: "mavpulse-lock",
                 renotify: false,
-                silent: info.level !== "bad" || prev === info.key,
+                silent: !(info.level === "bad" && prev !== info.key),
+                requireInteraction: true,
                 icon: "icons/icon-192.png",
                 data: { url: info.crossingId ? "./?detour=" + info.crossingId : "./" }
             });
         } catch (e) { console.warn("Lock notification failed", e); }
     }
     document.addEventListener("visibilitychange", () => {
-        renderLiveStatus();
         if (document.hidden) syncLockNote();
+        else closeLockNote();
     });
 
     // ======================================================================
@@ -1185,7 +1171,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     //  NOTIFICATIONS (commuter / quiet / off)
     // ======================================================================
     const MODE_HELP = {
-        commuter: "The bar at the top stays up while the app is open and updates in place. Locking the phone posts that same status once. It does not repeat until the path actually changes.",
+        commuter: "Lock the phone, or leave the app, and the lock screen shows the path once. It stays there while MavPulse is in the background and goes away when you open the app. It does not repeat unless the path changes.",
         quiet: "Only Severe or Extreme NWS weather warnings. Good if you live on campus.",
         off: "No notifications. You can still see everything in the app."
     };
@@ -1691,7 +1677,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         drawCrossingLayer();
         renderCommuteCard();
         renderOffline();
-        renderLiveStatus();
         syncLockNote();
         drawParkingLayer();
         drawStudyLayer();

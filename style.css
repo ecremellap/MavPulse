@@ -1508,13 +1508,6 @@ body {
 
 .offline-banner { background: #243044; color: #fff; padding: 10px 16px; font-size: 13px; line-height: 1.4; }
 .offline-banner[hidden] { display: none; }
-.live-status { display: block; width: 100%; border: 0; text-align: left; color: #fff; background: var(--signal-green); padding: 10px 16px 12px; cursor: pointer; }
-.live-status[data-level="bad"] { background: var(--blaze); }
-.live-status[data-level="warn"] { background: #b45309; }
-.live-status[hidden] { display: none; }
-.live-status-kicker { display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.85; }
-.live-status-title { display: block; font-size: 15px; font-weight: 800; line-height: 1.25; }
-.live-status-sub { display: block; font-size: 12.5px; line-height: 1.35; opacity: 0.95; }
 .commute-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: calc(100% - 32px); margin: 0 16px 14px; padding: 14px 16px; border: 0; border-radius: 16px; background: #fff; box-shadow: 0 1px 0 rgba(15, 30, 51, 0.06); text-align: left; cursor: pointer; }
 .commute-kicker { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--mav-blue); }
 #commute-summary { font-size: 15px; font-weight: 650; color: var(--ink); }
