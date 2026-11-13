@@ -223,6 +223,14 @@
         return { level: "good", title: "Path is clear", sub: "No blocked crossings or closures", key: "clear" };
     }
 
+    // "post" only when the status changed. Same key means the lock-screen
+    // notice is already there, so posting again would buzz every refresh.
+    function shouldPostLockNote(prevKey, info) {
+        if (!info) return prevKey ? "close" : "skip";
+        if (info.key === prevKey) return "skip";
+        return "post";
+    }
+
     // =================================================================
     //  Contributor points (motivation to tap "busy"/"open"/"blocked")
     // =================================================================
@@ -629,7 +637,7 @@
         RULES, shouldConfirmCrossingAlert, crossingState, createClosureReport, activeReports,
         activeClosures, latestStatus, canReport, studyStatus, routeStatus, filterCampusAlerts, shouldNotify, contributorStats,
         buildBrief, minutesAgo, distanceMeters, nearest,
-        activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards, commuterBar,
+        activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards, commuterBar, shouldPostLockNote,
         TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute,
         LEADERBOARD_WINDOW_MS, isUtaEmail, isAccountEmail, profileIsUta, cleanDisplayName, weeklyLeaderboard,
         defaultCommute, cleanCommute, crossingPattern, typicalBlockMinutes, shouldAlertBefore, detourHandoff, PATTERN_MIN_REPORTS

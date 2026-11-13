@@ -911,36 +911,56 @@ document.addEventListener("DOMContentLoaded", async () => {
             }))
         };
     }
-    let lockNoteKey = "";
+    let lockNoteKey = loadPref("mavpulse-lock-key", "");
+    function renderLiveStatus() {
+        const bar = $("live-status");
+        if (!bar) return;
+        const info = MP.commuterBar(commuterNoteInput());
+        if (!info || document.hidden) { bar.hidden = true; return; }
+        bar.hidden = false;
+        bar.dataset.level = info.level;
+        bar.dataset.crossing = info.crossingId || "";
+        $("live-status-title").textContent = info.title;
+        $("live-status-sub").textContent = info.sub;
+    }
+    $("live-status").addEventListener("click", () => {
+        const id = $("live-status").dataset.crossing;
+        if (id) openDetour(id);
+        else switchView("home");
+    });
     async function syncLockNote() {
+        const info = MP.commuterBar(commuterNoteInput());
+        const action = MP.shouldPostLockNote(lockNoteKey, info);
+        if (action === "skip") return;
         if (!("Notification" in window) || Notification.permission !== "granted" || !navigator.serviceWorker) return;
+        // While the app is open the bar carries the status. One lock-screen
+        // notice is posted only when that status actually changes.
+        if (action === "post" && !document.hidden) return;
+        const prev = lockNoteKey;
+        lockNoteKey = info ? info.key : "";
+        savePref("mavpulse-lock-key", lockNoteKey);
         let reg;
         try { reg = await navigator.serviceWorker.ready; } catch (e) { return; }
-        if (!reg || !reg.showNotification) return;
-        const info = MP.commuterBar(commuterNoteInput());
-        if (!info) {
-            lockNoteKey = "";
+        if (!reg) return;
+        if (action === "close") {
             try { (await reg.getNotifications({ tag: "mavpulse-lock" })).forEach(n => n.close()); } catch (e) { /* ignore */ }
             return;
         }
-        // Browsers hide alerts while the app is on screen. Post when the
-        // phone locks or the app goes to the background, so the lock screen has it.
-        if (!document.hidden) return;
-        const changed = info.key !== lockNoteKey;
-        lockNoteKey = info.key;
         try {
             await reg.showNotification(info.title, {
                 body: info.sub,
                 tag: "mavpulse-lock",
-                renotify: changed && info.level !== "good",
-                silent: info.level === "good",
+                renotify: false,
+                silent: info.level !== "bad" || prev === info.key,
                 icon: "icons/icon-192.png",
                 data: { url: info.crossingId ? "./?detour=" + info.crossingId : "./" }
             });
         } catch (e) { console.warn("Lock notification failed", e); }
     }
-    document.addEventListener("visibilitychange", () => { if (document.hidden) syncLockNote(); });
-    window.addEventListener("pagehide", () => syncLockNote());
+    document.addEventListener("visibilitychange", () => {
+        renderLiveStatus();
+        if (document.hidden) syncLockNote();
+    });
 
     // ======================================================================
     //  CAMPUS UPDATES (admin-posted)
@@ -1165,7 +1185,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     //  NOTIFICATIONS (commuter / quiet / off)
     // ======================================================================
     const MODE_HELP = {
-        commuter: "Confirmed blocks, closures, and weather. Lock the phone and that status shows on the lock screen. Allow notifications the first time you tap. On iPhone, add MavPulse to the Home Screen first.",
+        commuter: "The bar at the top stays up while the app is open and updates in place. Locking the phone posts that same status once. It does not repeat until the path actually changes.",
         quiet: "Only Severe or Extreme NWS weather warnings. Good if you live on campus.",
         off: "No notifications. You can still see everything in the app."
     };
@@ -1198,6 +1218,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         state.notified.add(event.key);
         savePref("mavpulse-notified", JSON.stringify([...state.notified].slice(-200)));
         toast(event.title);
+        if (document.visibilityState === "visible") return;
         if (!("Notification" in window) || Notification.permission !== "granted") return;
         try {
             const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
@@ -1670,6 +1691,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         drawCrossingLayer();
         renderCommuteCard();
         renderOffline();
+        renderLiveStatus();
         syncLockNote();
         drawParkingLayer();
         drawStudyLayer();

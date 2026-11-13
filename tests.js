@@ -441,6 +441,11 @@
         eq(clear.title, "Path is clear");
         eq(MP.commuterBar({ mode: "off", crossings: [{ id: "cooper", name: "Cooper St", state: "confirmed" }] }), null);
         eq(MP.commuterBar({ mode: "quiet", crossings: [{ id: "cooper", name: "Cooper St", state: "confirmed" }] }), null);
+        eq(MP.shouldPostLockNote("clear", clear), "skip");
+        eq(MP.shouldPostLockNote("clear", blocked), "post");
+        eq(MP.shouldPostLockNote("", clear), "post");
+        eq(MP.shouldPostLockNote("", null), "skip");
+        eq(MP.shouldPostLockNote("clear", null), "close");
     });
     test("Detour handoff: Davis route is about 1.8 mi and opens in three maps", () => {
         const h = MP.detourHandoff(DET.DETOURS.davis);
