@@ -899,6 +899,48 @@ document.addEventListener("DOMContentLoaded", async () => {
         ul.innerHTML = "";
         brief.lines.forEach(l => { const li = el("li"); const ic = el("span", "brief-icon"); ic.innerHTML = svg(l.icon); li.append(ic, el("span", null, l.text)); ul.appendChild(li); });
     }
+    function commuterNoteInput() {
+        return {
+            mode: state.notifyMode,
+            crossings: crossingStates(),
+            closures: MP.activeClosures(allReports(), now()),
+            alerts: (state.nwsAlerts || []).map(a => ({
+                event: a.event || (a.properties && a.properties.event),
+                severity: a.severity || (a.properties && a.properties.severity),
+                id: a.id || (a.properties && a.properties.id)
+            }))
+        };
+    }
+    let lockNoteKey = "";
+    async function syncLockNote() {
+        if (!("Notification" in window) || Notification.permission !== "granted" || !navigator.serviceWorker) return;
+        let reg;
+        try { reg = await navigator.serviceWorker.ready; } catch (e) { return; }
+        if (!reg || !reg.showNotification) return;
+        const info = MP.commuterBar(commuterNoteInput());
+        if (!info) {
+            lockNoteKey = "";
+            try { (await reg.getNotifications({ tag: "mavpulse-lock" })).forEach(n => n.close()); } catch (e) { /* ignore */ }
+            return;
+        }
+        // Browsers hide alerts while the app is on screen. Post when the
+        // phone locks or the app goes to the background, so the lock screen has it.
+        if (!document.hidden) return;
+        const changed = info.key !== lockNoteKey;
+        lockNoteKey = info.key;
+        try {
+            await reg.showNotification(info.title, {
+                body: info.sub,
+                tag: "mavpulse-lock",
+                renotify: changed && info.level !== "good",
+                silent: info.level === "good",
+                icon: "icons/icon-192.png",
+                data: { url: info.crossingId ? "./?detour=" + info.crossingId : "./" }
+            });
+        } catch (e) { console.warn("Lock notification failed", e); }
+    }
+    document.addEventListener("visibilitychange", () => { if (document.hidden) syncLockNote(); });
+    window.addEventListener("pagehide", () => syncLockNote());
 
     // ======================================================================
     //  CAMPUS UPDATES (admin-posted)
@@ -1123,7 +1165,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     //  NOTIFICATIONS (commuter / quiet / off)
     // ======================================================================
     const MODE_HELP = {
-        commuter: "Confirmed train blocks, new closures, and all NWS weather alerts. Never fires on a single unconfirmed tap.",
+        commuter: "Confirmed blocks, closures, and weather. Lock the phone and that status shows on the lock screen. Allow notifications the first time you tap. On iPhone, add MavPulse to the Home Screen first.",
         quiet: "Only Severe or Extreme NWS weather warnings. Good if you live on campus.",
         off: "No notifications. You can still see everything in the app."
     };
@@ -1135,6 +1177,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         $("notify-help").textContent = MODE_HELP[state.notifyMode];
         const blocked = "Notification" in window && Notification.permission === "denied";
         $("notify-blocked").hidden = !blocked;
+        syncLockNote();
     }
     document.querySelectorAll("#notify-mode button").forEach(b => b.addEventListener("click", async () => {
         state.notifyMode = b.dataset.mode;
@@ -1145,6 +1188,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         renderNotifyMode();
     }));
+    document.addEventListener("pointerdown", () => {
+        if (state.notifyMode === "off" || !("Notification" in window) || Notification.permission !== "default") return;
+        Notification.requestPermission().then(() => renderNotifyMode()).catch(() => {});
+    }, { once: true });
     async function maybeNotify(event) {
         if (state.notified.has(event.key)) return;
         if (!MP.shouldNotify(state.notifyMode, event)) return;
@@ -1623,6 +1670,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         drawCrossingLayer();
         renderCommuteCard();
         renderOffline();
+        syncLockNote();
         drawParkingLayer();
         drawStudyLayer();
         updateMapFooter();

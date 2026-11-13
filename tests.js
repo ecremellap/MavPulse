@@ -431,6 +431,17 @@
         eq(MP.shouldAlertBefore(commute, { id: "davis", state: "confirmed" }, at(8, 30)), false);
         eq(MP.shouldAlertBefore({ ...commute, alertBefore: false }, { id: "cooper", state: "confirmed" }, at(8, 30)), false);
     });
+    test("Commuter bar: blocked names the open path, clear stays quiet and green", () => {
+        const blocked = MP.commuterBar({ mode: "commuter", crossings: [{ id: "cooper", name: "Cooper St", state: "confirmed" }, { id: "center", name: "Center St", state: "likely" }], closures: [] });
+        eq(blocked.level, "bad");
+        eq(blocked.title, "Cooper St blocked");
+        assert(blocked.sub.indexOf("West St underpass") !== -1, blocked.sub);
+        const clear = MP.commuterBar({ mode: "commuter", crossings: [{ id: "cooper", name: "Cooper St", state: "clear" }], closures: [], alerts: [] });
+        eq(clear.level, "good");
+        eq(clear.title, "Path is clear");
+        eq(MP.commuterBar({ mode: "off", crossings: [{ id: "cooper", name: "Cooper St", state: "confirmed" }] }), null);
+        eq(MP.commuterBar({ mode: "quiet", crossings: [{ id: "cooper", name: "Cooper St", state: "confirmed" }] }), null);
+    });
     test("Detour handoff: Davis route is about 1.8 mi and opens in three maps", () => {
         const h = MP.detourHandoff(DET.DETOURS.davis);
         eq(h.miles, 1.8);

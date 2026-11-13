@@ -183,6 +183,46 @@
         return false;
     }
 
+    // In-app bar while Commuter mode is on. The phone notification often never
+    // appears, so the open app shows blocked vs clear itself.
+    function commuterBar(input) {
+        if (!input || input.mode !== "commuter") return null;
+        const crossings = input.crossings || [];
+        const blocked = crossings.filter(c => c.state === "confirmed");
+        const reported = crossings.filter(c => c.state === "reported");
+        const likely = crossings.filter(c => c.state === "likely");
+        const closures = input.closures || [];
+        const alerts = input.alerts || [];
+        const severe = alerts.filter(a => a.severity === "Severe" || a.severity === "Extreme");
+        const otherWx = alerts.filter(a => a.severity !== "Severe" && a.severity !== "Extreme");
+        if (blocked.length) {
+            const bowenOnly = blocked.length === 1 && blocked[0].id === "bowen";
+            const extra = [];
+            if (likely.length) extra.push(`${likely.map(c => c.name).join(", ")} likely blocked too`);
+            if (closures.length) extra.push(`${closures.length} closure${closures.length === 1 ? "" : "s"}`);
+            return {
+                level: "bad",
+                title: `${blocked.map(c => c.name).join(", ")} blocked`,
+                sub: [bowenOnly ? "Fielder Rd bridge is the open path" : "West St underpass is the open path"].concat(extra).join(" · "),
+                crossingId: blocked[0].id,
+                key: "block-" + blocked.map(c => c.id).sort().join(",")
+            };
+        }
+        if (severe.length) {
+            return { level: "bad", title: severe[0].event || "Severe weather", sub: "Rail crossings are clear", key: "wx-" + (severe[0].id || severe[0].event) };
+        }
+        if (closures.length) {
+            return { level: "warn", title: `${closures.length} closure${closures.length === 1 ? "" : "s"} reported`, sub: "Rail crossings are clear", key: "cls-" + closures.map(c => c.targetId || c.label).join(",") };
+        }
+        if (reported.length) {
+            return { level: "warn", title: `${reported.map(c => c.name).join(", ")} reported, not confirmed`, sub: "Needs one more person · not marked blocked yet", key: "rep-" + reported.map(c => c.id).sort().join(",") };
+        }
+        if (otherWx.length) {
+            return { level: "warn", title: otherWx[0].event || "Weather alert", sub: "Rail crossings are clear", key: "wx-" + (otherWx[0].id || otherWx[0].event) };
+        }
+        return { level: "good", title: "Path is clear", sub: "No blocked crossings or closures", key: "clear" };
+    }
+
     // =================================================================
     //  Contributor points (motivation to tap "busy"/"open"/"blocked")
     // =================================================================
@@ -589,7 +629,7 @@
         RULES, shouldConfirmCrossingAlert, crossingState, createClosureReport, activeReports,
         activeClosures, latestStatus, canReport, studyStatus, routeStatus, filterCampusAlerts, shouldNotify, contributorStats,
         buildBrief, minutesAgo, distanceMeters, nearest,
-        activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards,
+        activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards, commuterBar,
         TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute,
         LEADERBOARD_WINDOW_MS, isUtaEmail, isAccountEmail, profileIsUta, cleanDisplayName, weeklyLeaderboard,
         defaultCommute, cleanCommute, crossingPattern, typicalBlockMinutes, shouldAlertBefore, detourHandoff, PATTERN_MIN_REPORTS

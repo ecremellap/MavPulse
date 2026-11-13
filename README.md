@@ -65,14 +65,14 @@ The next-iteration screens from the review deck are in the app now:
 | `script.js` | UI wiring for the five tabs, map layers and settings |
 | `firestore.rules` | Server-side security: report shape validation, only reporters/admins can delete, only admins post updates, nobody can make themselves admin. A profile can be saved only after the email is verified, and its UTA flag must match that email. |
 | `sw.js`, `manifest.webmanifest` | Installable PWA + offline app shell |
-| `tests.js`, `tests.html` | 90 automated tests |
+| `tests.js`, `tests.html` | 91 automated tests |
 
 ## Run and test
 
 No build step. Serve the folder with any static server, e.g. `python3 -m http.server`, then open `http://localhost:8000`.
 
 ```
-node tests.js        # 90 / 90 tests passed
+node tests.js        # 91 / 91 tests passed
 ```
 
 ## Shared backend setup (Firebase)
