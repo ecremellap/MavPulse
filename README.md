@@ -35,7 +35,7 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 | UTA MavAlert relays (verified admins) + MavAlert sign-up and emergency info links | Admin relay; UTA has no public MavAlert feed | Live, shared |
 | Live GPS: blue dot, follow mode, warning when within 1 km of a blocked crossing, closure or road work | Browser geolocation | Live |
 | Morning brief | All of the above | Live |
-| Notifications: Commuter / Quiet / Off | Browser notifications | Live |
+| Notifications: Commuter / Quiet / Off | Browser notifications, including lock-screen alerts on supported installed mobile/tablet PWAs while the app runs in the background | Live |
 | Contributor points and levels | Crowd reports | Live |
 | Accounts: any verified email can sign in. `@mavs.uta.edu` and `@uta.edu` rank on the UTA board; every other address ranks on a separate board | Firebase Auth | Live, shared |
 | Admins: post official campus updates, remove bad reports | Firebase Auth + `/admins` allowlist | Live |
@@ -47,7 +47,7 @@ The next-iteration screens from the review deck are in the app now:
 - **Patterns** on each crossing stay hidden until 20 blocked reports in the last 7 days, then show the busiest hour. Fewer than that says how many are still needed.
 - **Open in Maps** hands the underpass or bridge route to Apple Maps, Google Maps, or Waze. The distance is the mapped route at about 20 mph, not live traffic.
 - **Offline** keeps a banner with the last refresh time and queues a report until the connection returns.
-- **Notifications blocked** explains how to allow them. A confirmed train can reach the lock screen on Android while the installed app is in the background. A fully closed app needs a push server, which this host does not run.
+- **Notifications blocked** explains how to allow them. Confirmed crossings and eligible weather alerts can reach the lock screen on supported Android and installed iPhone/iPad PWAs while MavPulse runs in the background. iPhone/iPad requires iOS/iPadOS 16.4+ and Home Screen installation. A fully closed app needs a push server, which this host does not run.
 
 "Shared" means reports sync to every user in real time through Firebase (Firestore). Without a Firebase config the app runs in on-device mode with the same features.
 

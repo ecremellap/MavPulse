@@ -72,7 +72,11 @@
     </div>
 
     <header class="app-bar">
-        <div class="app-brand"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#fff"/><g stroke="#0057a8" stroke-width="3.6" stroke-linecap="butt"><path d="M7 7.5l18 10.2M25 7.5L7 17.7"/></g><rect x="7.5" y="20.5" width="17" height="7" rx="3.5" fill="#0057a8"/><circle cx="11.6" cy="24" r="2.2" fill="#f26b1d"/><circle cx="20.4" cy="24" r="2.2" fill="#cbd6e4"/></svg>MavPulse</div>
+        <button class="icon-btn desktop-menu-toggle" id="desktop-menu-toggle" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="section-nav">
+            <svg class="i menu-icon-bars" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <svg class="i menu-icon-close" aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+        <button class="app-brand" id="home-brand" type="button" aria-label="MavPulse home"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#fff"/><g stroke="#0057a8" stroke-width="3.6" stroke-linecap="butt"><path d="M7 7.5l18 10.2M25 7.5L7 17.7"/></g><rect x="7.5" y="20.5" width="17" height="7" rx="3.5" fill="#0057a8"/><circle cx="11.6" cy="24" r="2.2" fill="#f26b1d"/><circle cx="20.4" cy="24" r="2.2" fill="#cbd6e4"/></svg>MavPulse</button>
         <div class="app-bar-right">
             <span class="sync-pill" id="sync-pill" title="Data mode">Connecting…</span>
             <button class="icon-btn" id="open-profile" type="button" aria-label="Profile and settings"><svg class="i" aria-hidden="true"><use href="#i-user"/></svg></button>
@@ -268,7 +272,8 @@
         </section>
     </main>
 
-    <nav class="tab-bar" aria-label="Sections">
+    <button class="desktop-nav-backdrop" id="desktop-nav-backdrop" type="button" aria-label="Close navigation menu" hidden></button>
+    <nav class="tab-bar" id="section-nav" aria-label="Sections">
         <span class="tab-glider" id="tab-glider" aria-hidden="true"></span>
         <button class="tab-item active" data-view="home" aria-current="page"><span class="tab-icon"><svg class="i" aria-hidden="true"><use href="#i-home"/></svg></span><span class="tab-label">Home</span></button>
         <button class="tab-item" data-view="map"><span class="tab-icon"><svg class="i" aria-hidden="true"><use href="#i-map"/></svg></span><span class="tab-label">Map</span></button>
@@ -350,7 +355,7 @@
             <div class="warn-card" id="notify-blocked" hidden>
                 <strong>Notifications are blocked</strong>
                 <p>Your phone is blocking alerts, so you'll only see them inside the app.</p>
-                <p class="section-hint">iPhone: Settings → Notifications, or Safari → this site → Allow. Android: the lock icon in the address bar → Permissions → Notifications → Allow. If MavPulse is installed, also allow notifications for the app. A fully closed app cannot be woken without a push server, which this free host does not run. Android can still show a lock-screen alert while the installed app is in the background.</p>
+                <p class="section-hint">iPhone/iPad: add MavPulse to the Home Screen (iOS/iPadOS 16.4+), then allow notifications in Settings → Notifications → MavPulse. Android: allow notifications in app settings or Chrome site settings. Keep MavPulse running in the background for live alerts; fully closed apps need a push server, which this host does not run.</p>
             </div>
 
             <h3>Install on your phone</h3>

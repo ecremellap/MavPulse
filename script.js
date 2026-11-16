@@ -85,8 +85,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ---------------- navigation ----------------
     const views = document.querySelectorAll(".app-view");
     const tabs = document.querySelectorAll(".tab-item");
+    const sectionNav = $("section-nav");
+    const menuButton = $("desktop-menu-toggle");
+    const menuBackdrop = $("desktop-nav-backdrop");
+    const desktopViewport = window.matchMedia("(min-width: 900px)");
     const ORDER = ["home", "map", "report", "study", "transit"];
     let currentView = "home";
+    function setDesktopMenuOpen(open, restoreFocus = false) {
+        const desktop = desktopViewport.matches;
+        const expanded = desktop && open;
+        sectionNav.classList.toggle("drawer-open", expanded);
+        sectionNav.setAttribute("aria-hidden", String(desktop && !expanded));
+        sectionNav.inert = desktop && !expanded;
+        menuButton.setAttribute("aria-expanded", String(expanded));
+        menuButton.setAttribute("aria-label", expanded ? "Close navigation menu" : "Open navigation menu");
+        menuBackdrop.hidden = !expanded;
+        if (expanded) sectionNav.querySelector(".tab-item.active")?.focus();
+        else if (restoreFocus && desktop) menuButton.focus();
+    }
     function moveGlider(id) {
         const tab = document.querySelector(`.tab-item[data-view="${id}"]`);
         const g = $("tab-glider");
@@ -116,8 +132,25 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (id === "map" && map) setTimeout(() => map.invalidateSize(), 120);
         if (id === "transit" && typeof loadLive === "function") loadLive();
     }
-    window.addEventListener("resize", () => moveGlider(currentView));
-    tabs.forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
+    setDesktopMenuOpen(false);
+    $("home-brand").addEventListener("click", () => {
+        switchView("home");
+        setDesktopMenuOpen(false);
+    });
+    menuButton.addEventListener("click", () => setDesktopMenuOpen(!sectionNav.classList.contains("drawer-open")));
+    menuBackdrop.addEventListener("click", () => setDesktopMenuOpen(false, true));
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape" && sectionNav.classList.contains("drawer-open")) setDesktopMenuOpen(false, true);
+    });
+    window.addEventListener("resize", () => {
+        moveGlider(currentView);
+        setDesktopMenuOpen(sectionNav.classList.contains("drawer-open"));
+    });
+    desktopViewport.addEventListener("change", () => setDesktopMenuOpen(false));
+    tabs.forEach(t => t.addEventListener("click", () => {
+        switchView(t.dataset.view);
+        setDesktopMenuOpen(false, true);
+    }));
     $("home-date").textContent = new Date().toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
 
     // ======================================================================
@@ -1171,8 +1204,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     //  NOTIFICATIONS (commuter / quiet / off)
     // ======================================================================
     const MODE_HELP = {
-        commuter: "Lock the phone, or leave the app, and the lock screen shows the path once. It stays there while MavPulse is in the background and goes away when you open the app. It does not repeat unless the path changes.",
-        quiet: "Only Severe or Extreme NWS weather warnings. Good if you live on campus.",
+        commuter: "Allow notifications and leave MavPulse running in the background for lock-screen alerts. On iPhone or iPad, install it to the Home Screen first (iOS/iPadOS 16.4+). Alerts stay until you return and repeat only if the route changes. Fully closed apps need a push server.",
+        quiet: "Only Severe or Extreme NWS weather warnings, including on the lock screen when notifications are allowed and MavPulse is in the background.",
         off: "No notifications. You can still see everything in the app."
     };
     function renderNotifyMode() {
@@ -1207,8 +1240,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (document.visibilityState === "visible") return;
         if (!("Notification" in window) || Notification.permission !== "granted") return;
         try {
-            const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
-            if (reg) reg.showNotification(event.title, { body: event.body, icon: "icons/icon-192.png", tag: event.key, data: { url: event.url || "./" } });
+            const reg = navigator.serviceWorker
+                ? (await navigator.serviceWorker.getRegistration()) || await navigator.serviceWorker.ready
+                : null;
+            if (reg) await reg.showNotification(event.title, { body: event.body, icon: "icons/icon-192.png", tag: event.key, data: { url: event.url || "./" } });
             else new Notification(event.title, { body: event.body, icon: "icons/icon-192.png" });
         } catch (e) { console.warn("Notification failed", e); }
     }
