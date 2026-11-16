@@ -20,10 +20,10 @@
  *
  * ReportStore contract (duck-typed, JS has no interface keyword):
  *   init() -> Promise<{ mode: "shared"|"local", uid }>
- *   onReports(cb)            cb(reports[]) on every change
+ *   onReports(cb)            cb(reports[], { fromCache }) on every change
  *   addReport(report)        -> Promise
  *   removeReport(id)         -> Promise
- *   onUpdates(cb)            admin-posted campus updates
+ *   onUpdates(cb)            cb(updates[], { fromCache }) for shared updates
  *   postUpdate({title,body}) -> Promise   (admins only)
  *   removeUpdate(id)         -> Promise   (admins only)
  *   adminSignIn(email, pw)   -> Promise<{ isAdmin }>
@@ -148,12 +148,12 @@
         onReports(cb) {
             const since = Date.now() - WINDOW_MS;
             this.db.collection("reports").where("at", ">=", since).orderBy("at", "desc").limit(500)
-                .onSnapshot(snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+                .onSnapshot(snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() })), { fromCache: snap.metadata.fromCache }),
                     err => console.error("Report feed error", err));
         }
         onUpdates(cb) {
             this.db.collection("updates").orderBy("at", "desc").limit(10)
-                .onSnapshot(snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+                .onSnapshot(snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() })), { fromCache: snap.metadata.fromCache }),
                     err => console.error("Updates feed error", err));
         }
         async addReport(report) {
@@ -264,7 +264,7 @@
 
     // Pick the shared store when configured, else fall back to local.
     async function createReportStore(config) {
-        if (config && config.apiKey && config.projectId) {
+        if (config && config.apiKey && config.projectId && !(root.navigator && root.navigator.onLine === false)) {
             try {
                 const store = new FirebaseReportStore(config);
                 const info = await Promise.race([

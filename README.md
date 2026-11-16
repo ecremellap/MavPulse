@@ -46,7 +46,7 @@ The next-iteration screens from the review deck are in the app now:
 - **My commute** on Home saves your direction, crossings, lot, and arrival time on this phone, and the brief calls out your route.
 - **Patterns** on each crossing stay hidden until 20 blocked reports in the last 7 days, then show the busiest hour. Fewer than that says how many are still needed.
 - **Open in Maps** hands the underpass or bridge route to Apple Maps, Google Maps, or Waze. The distance is the mapped route at about 20 mph, not live traffic.
-- **Offline** keeps a banner with the last refresh time and queues a report until the connection returns.
+- **Offline** works after the app has loaded online once: it opens the cached app shell and restores the last saved reports, campus updates, weather, NWS alerts, and nearby city road work. Reports made offline are kept on this device and retried when the connection returns. Live APIs, GPS, shuttle positions, and OpenStreetMap tiles still require a connection; the map can show saved reports and local reference layers without its online basemap.
 - **Notifications blocked** explains how to allow them. Confirmed crossings and eligible weather alerts can reach the lock screen on supported Android and installed iPhone/iPad PWAs while MavPulse runs in the background. iPhone/iPad requires iOS/iPadOS 16.4+ and Home Screen installation. A fully closed app needs a push server, which this host does not run.
 
 "Shared" means reports sync to every user in real time through Firebase (Firestore). Without a Firebase config the app runs in on-device mode with the same features.

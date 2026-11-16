@@ -1,32 +1,47 @@
 /*
  * MavPulse service worker: makes the app installable and lets the app
- * shell open offline. Live data (weather, NWS, reports, map tiles) always
- * goes to the network; only the app's own files are cached.
+ * shell open offline. External services and map tiles still need a network;
+ * the app separately saves a snapshot of recent campus data on the device.
  */
-const CACHE = "mavpulse-v23";
+const CACHE = "mavpulse-v27";
 const SHELL = [
   "./", "./index.html", "./style.css", "./script.js", "./logic.js", "./data.js", "./store.js", "./citydata.js", "./parking-areas.js", "./detours.js",
   "./firebase-config.js", "./manifest.webmanifest", "./vendor/leaflet/leaflet.js", "./vendor/leaflet/leaflet.css",
-  "./icons/icon-192.png", "./icons/icon-512.png"
+  "./vendor/leaflet/images/layers.png", "./vendor/leaflet/images/layers-2x.png",
+  "./vendor/leaflet/images/marker-icon.png", "./vendor/leaflet/images/marker-icon-2x.png", "./vendor/leaflet/images/marker-shadow.png",
+  "./icons/favicon-64.png", "./icons/apple-touch-icon.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png"
 ];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
-  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith("mavpulse-v") && k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
-// Network first for our own files (so updates show up), cache as offline fallback.
+// The versioned shell cache serves the app immediately without a network.
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
   if (e.request.method !== "GET" || url.origin !== self.location.origin) return;
-  e.respondWith(
-    // "no-cache" revalidates with the server, so a fresh deploy shows up at once.
-    fetch(e.request, { cache: "no-cache" }).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy));
-      return res;
-    }).catch(() => caches.match(e.request).then(r => r || caches.match("./index.html")))
-  );
+  e.respondWith((async () => {
+    const cached = await caches.match(e.request);
+    if (cached) return cached;
+    try {
+      const response = await fetch(e.request);
+      if (response.ok) {
+        const cache = await caches.open(CACHE);
+        await cache.put(e.request, response.clone());
+      }
+      return response;
+    } catch (error) {
+      if (e.request.mode === "navigate") {
+        const app = await caches.match("./index.html");
+        if (app) return app;
+      }
+      return new Response("This resource is not available offline.", {
+        status: 503,
+        headers: { "Content-Type": "text/plain; charset=utf-8" }
+      });
+    }
+  })());
 });
 self.addEventListener("notificationclick", e => {
   e.notification.close();

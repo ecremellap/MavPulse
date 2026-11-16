@@ -405,6 +405,22 @@
         try { await s.utaSignUp("a@mavs.uta.edu", "secret1"); } catch (e) { msg = e.message; }
         assert(/shared backend/.test(msg), "message mentions the shared backend");
     });
+    if (inNode) test("ReportStore: skips Firebase initialization when offline", async () => {
+        const descriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+        const warn = console.warn;
+        let warnings = 0;
+        Object.defineProperty(globalThis, "navigator", { configurable: true, value: { onLine: false } });
+        console.warn = () => { warnings++; };
+        try {
+            const result = await STORE.createReportStore({ apiKey: "offline", projectId: "offline" });
+            eq(result.info.mode, "local");
+            eq(warnings, 0, "offline startup should not attempt Firebase");
+        } finally {
+            console.warn = warn;
+            if (descriptor) Object.defineProperty(globalThis, "navigator", descriptor);
+            else delete globalThis.navigator;
+        }
+    });
 
     test("Commute: west approach starts with Bowen, Davis and Cooper", () => {
         const c = MP.defaultCommute("west");

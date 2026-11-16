@@ -15,16 +15,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     const MP = window.MP;
     const $ = id => document.getElementById(id);
     const MIN = 60 * 1000;
+    const OFFLINE_SNAPSHOT = "mavpulse-offline-snapshot-v1";
+    const cachedOffline = loadJSON(OFFLINE_SNAPSHOT, {});
 
     // ---------------- app state ----------------
     const state = {
-        reports: [],          // from the store
+        reports: Array.isArray(cachedOffline.reports) ? cachedOffline.reports : [],
         weekReports: null,    // last 7 days (shared mode), for points + leaderboard
         profiles: {},         // leaderboard names (verified accounts)
         simReports: [],       // test-mode only, never leave this device
-        updates: [],
-        weather: null,
-        nwsAlerts: [],
+        updates: Array.isArray(cachedOffline.updates) ? cachedOffline.updates : [],
+        weather: cachedOffline.weather || null,
+        nwsAlerts: Array.isArray(cachedOffline.nwsAlerts) ? cachedOffline.nwsAlerts : [],
+        roadWork: Array.isArray(cachedOffline.roadWork) ? cachedOffline.roadWork : null,
         uid: null,
         mode: "local",
         pickedClosureKind: null,
@@ -38,13 +41,37 @@ document.addEventListener("DOMContentLoaded", async () => {
     function readOutbox() { return loadJSON(OUTBOX, []).filter(r => r && r.at); }
     function writeOutbox(list) { try { localStorage.setItem(OUTBOX, JSON.stringify(list)); } catch (e) { /* ignore */ } }
     const allReports = () => state.reports.concat(state.simReports, readOutbox().filter(o => !state.reports.some(r => r.reporterId === o.reporterId && r.targetId === o.targetId && r.at === o.at && r.status === o.status)));
+    function mergeByKey(existing, incoming, keyOf) {
+        const merged = new Map();
+        existing.concat(incoming).forEach(item => merged.set(keyOf(item) || JSON.stringify(item), item));
+        return Array.from(merged.values());
+    }
+    const reportKey = r => r.reporterId && r.targetId && r.at != null && r.status
+        ? [r.reporterId, r.targetId, r.at, r.status].join("|")
+        : r.id;
     const now = () => Date.now();
 
     function loadPref(k, dflt) { try { return localStorage.getItem(k) || dflt; } catch (e) { return dflt; } }
     function savePref(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
     function loadJSON(k, dflt) { try { return JSON.parse(localStorage.getItem(k)) || dflt; } catch (e) { return dflt; } }
+    function saveOfflineSnapshot() {
+        try {
+            localStorage.setItem(OFFLINE_SNAPSHOT, JSON.stringify({
+                savedAt: state.lastLiveAt,
+                reports: state.reports.slice(0, 500),
+                updates: state.updates.slice(0, 20),
+                weather: state.weather,
+                nwsAlerts: state.nwsAlerts.slice(0, 20),
+                roadWork: state.roadWork ? state.roadWork.slice(0, 50) : null
+            }));
+        } catch (e) { console.warn("Couldn't save the offline data snapshot.", e); }
+    }
+    function markLiveData() {
+        state.lastLiveAt = Date.now();
+        savePref("mavpulse-last-live", String(state.lastLiveAt));
+    }
     state.commute = MP.cleanCommute(loadJSON("mavpulse-commute", null));
-    state.lastLiveAt = Number(loadPref("mavpulse-last-live", "")) || null;
+    state.lastLiveAt = Number(loadPref("mavpulse-last-live", "")) || Number(cachedOffline.savedAt) || null;
     const svg = (name, cls) => `<svg class="${cls || "i"}" aria-hidden="true"><use href="#i-${name}"/></svg>`;
     function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
 
@@ -826,14 +853,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             const res = await fetch(`https://api.open-meteo.com/v1/forecast?${p}`);
             if (!res.ok) throw new Error(res.status);
             const d = await res.json();
-            const [cond, icon] = WX[d.current.weather_code] || ["Current conditions", ""];
-            state.weather = { temp: d.current.temperature_2m, condition: cond, rainChance: d.daily.precipitation_probability_max[0] };
-            $("current-weather-icon").innerHTML = svg(weatherIcon(d.current.weather_code));
-            $("current-weather-icon").dataset.kind = weatherIcon(d.current.weather_code);
-            $("current-temperature").textContent = Math.round(d.current.temperature_2m);
-            $("current-condition").textContent = cond;
-            $("weather-sub").textContent = `Feels ${Math.round(d.current.apparent_temperature)}° · H ${Math.round(d.daily.temperature_2m_max[0])}° L ${Math.round(d.daily.temperature_2m_min[0])}° · Wind ${Math.round(d.current.wind_speed_10m)} mph · Rain ${d.daily.precipitation_probability_max[0]}%`;
-            $("weather-updated").textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+            const [cond] = WX[d.current.weather_code] || ["Current conditions", ""];
+            state.weather = {
+                temp: d.current.temperature_2m, condition: cond,
+                rainChance: d.daily.precipitation_probability_max[0],
+                apparentTemp: d.current.apparent_temperature,
+                high: d.daily.temperature_2m_max[0], low: d.daily.temperature_2m_min[0],
+                wind: d.current.wind_speed_10m, code: d.current.weather_code, updatedAt: Date.now()
+            };
+            renderWeather();
+            markLiveData();
+            saveOfflineSnapshot();
             if (fromButton === true) {
                 const strip = $("weather-strip");
                 strip.classList.remove("refreshed"); void strip.offsetWidth; strip.classList.add("refreshed");
@@ -841,13 +871,27 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         } catch (e) {
             console.error("Weather unavailable", e);
-            $("current-condition").textContent = "Weather unavailable right now";
+            if (state.weather) renderWeather(true);
+            else $("current-condition").textContent = "Weather unavailable right now";
             if (fromButton === true) toast("Couldn't reach the weather service. Try again in a moment.", "warn");
         } finally {
             // keep the spinner up long enough to read as "it worked"
             setTimeout(() => { btn.classList.remove("loading"); btn.disabled = false; btn.removeAttribute("aria-busy"); }, Math.max(0, 600 - (Date.now() - started)));
         }
         renderBrief();
+    }
+    function renderWeather(cached) {
+        const w = state.weather;
+        if (!w) return;
+        const kind = weatherIcon(w.code);
+        $("current-weather-icon").innerHTML = svg(kind);
+        $("current-weather-icon").dataset.kind = kind;
+        $("current-temperature").textContent = Math.round(w.temp);
+        $("current-condition").textContent = w.condition;
+        $("weather-sub").textContent = `Feels ${Math.round(w.apparentTemp)}° · H ${Math.round(w.high)}° L ${Math.round(w.low)}° · Wind ${Math.round(w.wind)} mph · Rain ${w.rainChance}%`;
+        $("weather-updated").textContent = cached
+            ? `Saved ${w.updatedAt ? new Date(w.updatedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "for offline use"}`
+            : `Updated ${new Date(w.updatedAt || Date.now()).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
     }
     $("weather-refresh").addEventListener("click", () => loadWeather(true));
 
@@ -860,19 +904,24 @@ document.addEventListener("DOMContentLoaded", async () => {
             const features = (data.features || []).filter(f => MP.filterCampusAlerts([f], ["tarrant", "arlington"]).length);
             state.nwsAlerts = MP.filterCampusAlerts(features, ["tarrant", "arlington"]);
             renderNws();
+            markLiveData();
+            saveOfflineSnapshot();
             drawAlertAreas(features);
             features.forEach(f => maybeNotify({ type: "weather", severity: f.properties.severity, key: "wx-" + f.properties.id, title: f.properties.event, body: f.properties.headline || "" }));
         } catch (e) {
             console.error("NWS unavailable", e);
-            $("nws-alert-status").textContent = "Live weather alerts are temporarily unavailable.";
+            if (Array.isArray(cachedOffline.nwsAlerts)) renderNws(true);
+            else $("nws-alert-status").textContent = "Live weather alerts are temporarily unavailable.";
         }
         renderBrief();
     }
-    function renderNws() {
+    function renderNws(cached) {
         const list = $("nws-alert-list");
         list.innerHTML = "";
         const a = state.nwsAlerts;
-        $("nws-alert-status").textContent = a.length ? `${a.length} active alert${a.length === 1 ? "" : "s"} for Tarrant County` : "No active NWS alerts for Tarrant County right now.";
+        $("nws-alert-status").textContent = cached
+            ? (a.length ? `${a.length} saved alert${a.length === 1 ? "" : "s"} from the last connection` : "No saved NWS alerts from the last connection.")
+            : (a.length ? `${a.length} active alert${a.length === 1 ? "" : "s"} for Tarrant County` : "No active NWS alerts for Tarrant County right now.");
         a.forEach(al => {
             const card = el("div", "weather-card nws-alert-card");
             const meta = el("div", "weather-meta");
@@ -1552,7 +1601,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     let deferredInstall = null;
     window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredInstall = e; $("install-btn").hidden = false; });
     $("install-btn").addEventListener("click", async () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall = null; $("install-btn").hidden = true; });
-    if ("serviceWorker" in navigator && location.protocol === "https:") {
+    if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
         navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW registration failed", e));
     }
 
@@ -1563,36 +1612,44 @@ document.addEventListener("DOMContentLoaded", async () => {
     $("link-mavalert").href = D.LINKS.mavalertSignup;
     $("link-emergency").href = D.LINKS.utaEmergency;
     $("link-hotline").href = D.LINKS.utaEmergencyLine;
-    state.roadWork = null;
-    async function loadRoadWork() {
+    if (state.roadWork) state.roadWork = MP.activeRoadWork(state.roadWork, now());
+    function renderRoadWork() {
         const list = $("roadwork-list");
+        list.innerHTML = "";
+        if (!state.roadWork) {
+            list.appendChild(el("p", "empty-alerts", "City road-work data is temporarily unavailable."));
+            return;
+        }
+        if (map) {
+            layers.roadwork.clearLayers();
+            state.roadWork.forEach(w => w.paths.forEach(path => {
+                L.polyline(path.map(([x, y]) => [y, x]), { color: "#c2410c", weight: 6, opacity: 0.85, dashArray: "8 6" })
+                    .bindPopup(popupHTML(`City road work · ${w.kind}`, [w.segments.slice(0, 3).join(", "), `Barricades until ${new Date(w.until).toLocaleDateString([], { month: "short", day: "numeric" })}`, `Permit ${w.permit}`]))
+                    .addTo(layers.roadwork);
+            }));
+        }
+        if (!state.roadWork.length) list.appendChild(emptyState("check", "No barricaded city road work near campus right now."));
+        state.roadWork.slice(0, 6).forEach(w => {
+            const card = el("article", "report-card roadwork-card");
+            const meta = el("div", "weather-meta");
+            meta.append(el("span", null, `City permit · ${w.kind}`), el("span", null, `until ${new Date(w.until).toLocaleDateString([], { month: "short", day: "numeric" })}`));
+            card.append(meta, el("h4", null, [...new Set(w.segments)].slice(0, 2).join(" · ")), el("p", null, w.scope.slice(0, 140)));
+            const b = el("button", "pill-btn", "Map"); b.type = "button";
+            b.addEventListener("click", () => { switchView("map"); if (map && w.paths[0]) map.setView([w.paths[0][0][1], w.paths[0][0][0]], 17); });
+            card.appendChild(b);
+            list.appendChild(card);
+        });
+        if (state.roadWork.length > 6) list.appendChild(el("p", "section-hint", `+${state.roadWork.length - 6} more on the map.`));
+    }
+    async function loadRoadWork() {
         try {
             state.roadWork = MP.activeRoadWork(await window.MP_CITY.roadWork(), now());
-            if (map) {
-                layers.roadwork.clearLayers();
-                state.roadWork.forEach(w => w.paths.forEach(path => {
-                    L.polyline(path.map(([x, y]) => [y, x]), { color: "#c2410c", weight: 6, opacity: 0.85, dashArray: "8 6" })
-                        .bindPopup(popupHTML(`City road work · ${w.kind}`, [w.segments.slice(0, 3).join(", "), `Barricades until ${new Date(w.until).toLocaleDateString([], { month: "short", day: "numeric" })}`, `Permit ${w.permit}`]))
-                        .addTo(layers.roadwork);
-                }));
-            }
-            list.innerHTML = "";
-            if (!state.roadWork.length) list.appendChild(emptyState("check", "No barricaded city road work near campus right now."));
-            state.roadWork.slice(0, 6).forEach(w => {
-                const card = el("article", "report-card roadwork-card");
-                const meta = el("div", "weather-meta");
-                meta.append(el("span", null, `City permit · ${w.kind}`), el("span", null, `until ${new Date(w.until).toLocaleDateString([], { month: "short", day: "numeric" })}`));
-                card.append(meta, el("h4", null, [...new Set(w.segments)].slice(0, 2).join(" · ")), el("p", null, w.scope.slice(0, 140)));
-                const b = el("button", "pill-btn", "Map"); b.type = "button";
-                b.addEventListener("click", () => { switchView("map"); if (map && w.paths[0]) map.setView([w.paths[0][0][1], w.paths[0][0][0]], 17); });
-                card.appendChild(b);
-                list.appendChild(card);
-            });
-            if (state.roadWork.length > 6) list.appendChild(el("p", "section-hint", `+${state.roadWork.length - 6} more on the map.`));
+            markLiveData();
+            saveOfflineSnapshot();
         } catch (e) {
             console.error("City road work unavailable", e);
-            list.innerHTML = ""; list.appendChild(el("p", "empty-alerts", "City road-work data is temporarily unavailable."));
         }
+        renderRoadWork();
         renderBrief(); updateMapFooter();
     }
     async function loadRail() {
@@ -1737,6 +1794,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderRoutes();
     renderNotifyMode();
     renderAll();
+    if (state.weather) renderWeather(true);
+    if (Array.isArray(cachedOffline.nwsAlerts)) renderNws(true);
+    if (state.roadWork) renderRoadWork();
     loadWeather();
     loadNws();
     loadRoadWork();
@@ -1755,9 +1815,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     $("about-note").textContent = info.mode === "shared"
         ? "Reports sync live to every MavPulse user through the shared backend."
         : "On-device mode: reports are saved in this browser only (shared backend not configured or unreachable).";
-    store.onReports(list => {
-        state.reports = list;
-        if (navigator.onLine) { state.lastLiveAt = Date.now(); savePref("mavpulse-last-live", String(state.lastLiveAt)); }
+    store.onReports((list, metadata) => {
+        state.reports = info.mode === "local" || (metadata && metadata.fromCache)
+            ? mergeByKey(state.reports, list, reportKey)
+            : list;
+        if (info.mode === "shared" && !(metadata && metadata.fromCache)) markLiveData();
+        saveOfflineSnapshot();
         renderAll(); notifyFromReports();
     });
     if (info.mode === "shared") {
@@ -1770,8 +1833,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
     renderAccount();
-    store.onUpdates(list => {
-        state.updates = list; renderUpdates(); renderBrief();
+    store.onUpdates((list, metadata) => {
+        state.updates = info.mode === "local" || (metadata && metadata.fromCache)
+            ? mergeByKey(state.updates, list, u => u.id || `${u.at}|${u.title}`)
+            : list;
+        if (info.mode === "shared" && !(metadata && metadata.fromCache)) markLiveData();
+        saveOfflineSnapshot();
+        renderUpdates(); renderBrief();
         list.filter(u => u.kind === "mavalert" && now() - u.at < 60 * MIN).forEach(u => maybeNotify({ type: "weather", severity: "Extreme", key: "mav-" + u.id, title: `UTA MavAlert: ${u.title}`, body: u.body }));
     });
     renderAdmin();
