@@ -272,6 +272,19 @@
         const out = MP.spreadTrain(withStates({ center: "reported" }));
         assert(out.filter(c => c.state === "confirmed").length === 0, "no confirmations from inference");
     });
+    test("Long train: one unconfirmed report marks only its own crossing", () => {
+        const out = MP.spreadTrain(withStates({ center: "reported" }));
+        eq(out.filter(c => c.state === "likely").length, 0);
+        eq(out.find(c => c.id === "center").state, "reported");
+    });
+    test("Anti-spam: at most 6 reports per person in 10 minutes, across all targets", () => {
+        const six = ["bowen", "davis", "cooper", "center", "mesquite", "collins"].map((id, i) => block(id, "a", i));
+        eq(MP.underRateLimit(six.slice(0, 5), "a", min(6)), true);
+        eq(MP.underRateLimit(six, "a", min(6)), false);
+        eq(MP.underRateLimit(six, "a", min(11)), true, "window passes");
+        eq(MP.underRateLimit(six, "b", min(6)), true, "other people unaffected");
+        eq(MP.underRateLimit(six, "a", min(6), "clear"), true, "corrections always allowed");
+    });
     test("Long train: likely crossings name the crossing the train was reported at", () => {
         eq(MP.spreadTrain(withStates({ center: "confirmed" })).find(c => c.id === "mesquite").cause, "Center St");
     });

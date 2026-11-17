@@ -579,6 +579,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             toast("You already reported this. You can report it again in 2 minutes.", "warn");
             return false;
         }
+        if (!MP.underRateLimit(allReports(), state.uid, now(), report.status)) {
+            toast("That's a lot of reports at once. Try again in a few minutes.", "warn");
+            return false;
+        }
         const full = { ...report, reporterId: state.uid, at: now() };
         if (!navigator.onLine) {
             writeOutbox(readOutbox().concat([{ ...full, id: "out-" + full.at }]));
@@ -1781,7 +1785,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ======================================================================
     //  PROFILE SHEET + ADMIN
     // ======================================================================
+    let boardsReady = null, boardsStarted = false;
+    function ensureBoards() {
+        if (boardsStarted || !boardsReady) return;
+        boardsStarted = true; boardsReady();
+    }
     function openSheet() {
+        ensureBoards();
         const sh = $("profile-sheet"), bd = $("sheet-backdrop");
         sh.hidden = false; bd.hidden = false; renderPoints();
         requestAnimationFrame(() => { sh.classList.add("open"); bd.classList.add("open"); });
@@ -1854,7 +1864,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredInstall = e; $("install-btn").hidden = false; });
     $("install-btn").addEventListener("click", async () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall = null; $("install-btn").hidden = true; });
     if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
-        navigator.serviceWorker.register("sw.js").catch(e => console.warn("SW registration failed", e));
+        // A new deploy installs a new service worker, which takes control
+        // (skipWaiting + clients.claim). Reload once when that happens, so
+        // the newest version shows on the first open instead of the second.
+        const hadController = !!navigator.serviceWorker.controller;
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+            if (!hadController || reloaded) return;
+            reloaded = true;
+            location.reload();
+        });
+        navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+            // Installed apps can stay open for days: check for updates on return.
+            document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
+        }).catch(e => console.warn("SW registration failed", e));
     }
 
 
@@ -2079,9 +2102,14 @@ document.addEventListener("DOMContentLoaded", async () => {
         renderAll(); notifyFromReports();
     });
     if (info.mode === "shared") {
-        store.onWeekReports(list => { state.weekReports = list; renderPoints(); });
-        store.onProfiles(map => { state.profiles = map; renderPoints(); renderAccount(); });
-        if (store.onModerators) store.onModerators(list => { state.moderators = list; renderModerators(); });
+        // Leaderboard data (a week of reports + every public profile) is the
+        // biggest Firestore read. Load it only once someone opens Profile.
+        boardsReady = () => {
+            store.onWeekReports(list => { state.weekReports = list; renderPoints(); });
+            store.onProfiles(map => { state.profiles = map; renderPoints(); renderAccount(); });
+            if (store.onModerators) store.onModerators(list => { state.moderators = list; renderModerators(); });
+        };
+        if (!$("profile-sheet").hidden || (store.account && !store.account.verified)) ensureBoards();
         // Came back from the verification link? Pick it up automatically.
         if (store.account && !store.account.verified) store.checkVerified().then(ok => { if (ok) afterVerified(); renderAccount(); renderAll(); }).catch(() => {});
         document.addEventListener("visibilitychange", () => {

@@ -22,6 +22,8 @@
         LOT_TTL_MS: 90 * MINUTE,              // "lot full" counts for 90 min
         STUDY_TTL_MS: 60 * MINUTE,            // study report counts for 60 min
         REPORT_COOLDOWN_MS: 2 * MINUTE,       // one report per target per 2 min
+        RATE_WINDOW_MS: 10 * MINUTE,          // per person, across ALL targets:
+        MAX_REPORTS_PER_WINDOW: 6,            // at most 6 reports in 10 min ("it's clear" excepted)
         POINTS_PER_REPORT: 10,
         POINTS_CONFIRMED_BONUS: 5
     };
@@ -120,6 +122,15 @@
     function canReport(reports, reporterId, type, targetId, now) {
         return !(reports || []).some(r => r.reporterId === reporterId && r.type === type
             && r.targetId === targetId && now - r.at < RULES.REPORT_COOLDOWN_MS);
+    }
+
+    // Anti-spam across targets: tapping every crossing or closure in a row
+    // is capped per person. "It's clear" corrections are never blocked.
+    function underRateLimit(reports, reporterId, now, status) {
+        if (status === "clear") return true;
+        const recent = (reports || []).filter(r => r.reporterId === reporterId && r.status !== "clear"
+            && now - r.at >= 0 && now - r.at < RULES.RATE_WINDOW_MS);
+        return recent.length < RULES.MAX_REPORTS_PER_WINDOW;
     }
 
     // ---- study spots: crowd reports only, no invented estimate ----
@@ -414,7 +425,9 @@
     const TRAIN_REACH_M = 2000;
     function spreadTrain(crossings) {
         const list = (crossings || []).map(c => ({ ...c }));
-        const sources = list.filter(c => c.state === "reported" || c.state === "confirmed");
+        // Only a CONFIRMED train (two people) spreads to neighbours; one
+        // unconfirmed tap marks just its own crossing (Team 3 review fix).
+        const sources = list.filter(c => c.state === "confirmed");
         list.forEach(c => {
             if (c.state !== "clear") return;
             let best = null;
@@ -741,7 +754,7 @@
 
     const LOGIC = {
         RULES, shouldConfirmCrossingAlert, crossingState, createClosureReport, activeReports,
-        activeClosures, latestStatus, canReport, studyStatus, routeStatus, filterCampusAlerts, shouldNotify, contributorStats,
+        activeClosures, latestStatus, canReport, underRateLimit, studyStatus, routeStatus, filterCampusAlerts, shouldNotify, contributorStats,
         buildBrief, minutesAgo, distanceMeters, nearest,
         activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards, commuterBar, shouldPostLockNote,
         TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute,
