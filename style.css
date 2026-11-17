@@ -837,7 +837,7 @@ body {
     padding: 12px 16px 6px; padding-top: max(12px, env(safe-area-inset-top));
     background: var(--bg-dark-header); color: #fff;
 }
-.app-brand { font-weight: 800; font-size: 15px; display: flex; align-items: center; gap: 8px; letter-spacing: -0.2px; }
+.app-brand { background: none; color: white; border: none; font-weight: 800; font-size: 15px; display: flex; align-items: center; gap: 8px; letter-spacing: -0.2px; }
 .brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--color-orange-alert); box-shadow: 0 0 0 4px rgba(217,83,37,0.25); }
 .app-bar-right { display: flex; align-items: center; gap: 8px; }
 .sync-pill { font-size: 10px; font-weight: 700; padding: 4px 8px; border-radius: 999px; background: #1f2937; color: #cbd5e1; }
@@ -1061,6 +1061,9 @@ body { background: #dfe6ee; color: var(--ink); }
 .view-tagline { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; color: #bcd3ec; margin-bottom: 2px; }
 .view-title { font-size: 28px; font-weight: 800; letter-spacing: -0.3px; line-height: 1.1; }
 .view-body { padding: 16px; }
+@media (max-width: 899px) {
+    .app-bar-right .icon-btn { background: rgba(255,255,255,0.14); }
+}
 
 /* Section headings */
 .section-title { font-size: 17px; font-weight: 800; color: var(--ink); margin: 26px 0 4px; letter-spacing: -0.1px; }
@@ -1732,5 +1735,11 @@ body {
 
 @media (min-width: 900px) and (prefers-reduced-motion: reduce) {
     .tab-bar { transition: none; }
+}
+
+#home-brand.app-brand {
+    background: none;
+    border: none;
+    color: white;
 }
 
