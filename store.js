@@ -101,6 +101,8 @@
         async utaSignOut() { }
         onWeekReports(cb) { this.reportListeners.push(cb); cb(this._reports()); }
         onProfiles(cb) { cb({}); }
+        onModerators(cb) { cb(null); }
+        async getReportsSince(since) { return this._reports().filter(r => r.at >= since); }
         async saveProfile() { throw new Error("The leaderboard needs the shared backend."); }
     }
 
@@ -179,7 +181,7 @@
             await this._refreshRole();
             if (!this.isAdmin) {
                 await this.adminSignOut();
-                throw new Error("This account is not on the admin list yet.");
+                throw new Error("This account is not on the moderator list yet.");
             }
             return { isAdmin: true };
         }
@@ -245,6 +247,19 @@
             this.db.collection("reports").where("at", ">=", since).orderBy("at", "desc").limit(3000)
                 .onSnapshot(snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
                     err => console.error("Weekly feed error", err));
+        }
+        // One-shot read for the semester board (not a live listener, to keep
+        // Firestore reads low: it only runs when someone opens that tab).
+        async getReportsSince(since) {
+            const snap = await this.db.collection("reports").where("at", ">=", since).orderBy("at", "desc").limit(5000).get();
+            return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        }
+        // Public moderator list (first names only). Needs the Iteration 4 rule
+        // "allow read" on /admins; with the old rule this just reports null.
+        onModerators(cb) {
+            this.db.collection("admins").limit(50)
+                .onSnapshot(snap => cb(snap.docs.map(d => ({ uid: d.id, name: (d.data() || {}).name || "" }))),
+                    () => cb(null));
         }
         onProfiles(cb) {
             this.db.collection("profiles").limit(1000)

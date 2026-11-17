@@ -158,6 +158,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelector(".main-content").scrollTop = 0;
         if (id === "map" && map) setTimeout(() => map.invalidateSize(), 120);
         if (id === "transit" && typeof loadLive === "function") loadLive();
+        if (id === "study" && typeof loadLibraries === "function") loadLibraries();
     }
     setDesktopMenuOpen(false);
     $("home-brand").addEventListener("click", () => {
@@ -378,6 +379,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         updateMapFooter();
     }
 
+    // Every live query the app makes is logged here (exact URL, time, rows)
+    // for the "Where this data comes from" screen.
+    const sourceLog = {};
+    function logSource(id, url, ok, rows) { sourceLog[id] = { url, at: Date.now(), ok, rows }; }
+
     // Live MavMover data through the MavPulse relay (relay/worker.js).
     const RELAY = (window.MAVPULSE_SHUTTLE_RELAY || "").replace(/\/$/, "");
     state.live = { ok: false, routes: {}, at: 0 };
@@ -395,8 +401,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             details.forEach(dj => { const r = MP.parseTripShotRoute(dj, Date.now()); if (r) routes[liveKey(r.name)] = r; });
             if (!Object.keys(routes).length) throw new Error("No routes returned");
             state.live = { ok: true, routes, at: Date.now() };
+            logSource("tripshot", `${RELAY}/v1/p/shared/route?includePreviousDayRidesSpanningMidnight=true&startDay=${day}&endDay=${day}&regionId=${D.LINKS.tripshotRegion}`, true, Object.values(routes).reduce((n, r) => n + r.buses.length, 0));
         } catch (e) {
             console.warn("Live MavMover data unavailable", e);
+            logSource("tripshot", `${RELAY}/v1/p/shared/route?regionId=${D.LINKS.tripshotRegion}`, false, 0);
             state.live = { ...state.live, ok: Object.keys(state.live.routes).length > 0 && Date.now() - state.live.at < 120000 };
         } finally { liveBusy = false; }
         drawShuttleLayer();
@@ -723,29 +731,95 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
         renderStudy();
     }));
+    // Official library data: hours for every library, live headcount for Central.
+    state.lib = { hours: null, occ: null, occErr: false, hoursErr: false };
+    let libBusy = false;
+    async function loadLibraries() {
+        if (libBusy || !window.MP_LIB) return;
+        libBusy = true;
+        const [h, o] = await Promise.allSettled([
+            state.lib.hours && now() - state.lib.hoursAt < 30 * MIN ? Promise.resolve(state.lib.hours) : window.MP_LIB.hours(),
+            window.MP_LIB.centralOccupancy(RELAY)
+        ]);
+        if (h.status === "fulfilled") { if (h.value !== state.lib.hours) state.lib.hoursAt = now(); state.lib.hours = h.value; state.lib.hoursErr = false; }
+        else { state.lib.hoursErr = true; console.warn("Library hours unavailable", h.reason); }
+        if (o.status === "fulfilled") { state.lib.occ = o.value; state.lib.occErr = false; }
+        else { state.lib.occErr = true; console.warn("Library headcount unavailable", o.reason); }
+        libBusy = false;
+        renderStudy();
+    }
+    function libraryBlock(s) {
+        const lid = window.MP_LIB && window.MP_LIB.LIBCAL_IDS[s.id];
+        if (!lid) return null;
+        const box = el("div", "lib-official");
+        const today = state.lib.hours ? MP.libraryToday(state.lib.hours, lid, now()) : null;
+        if (today && today.found) {
+            const line = el("div", "lib-hours " + (today.openNow ? "open" : "closed"));
+            line.append(el("span", "lib-dot"), el("strong", null, today.openNow ? "Open now" : "Closed now"), el("span", null, ` · ${today.label} · today ${today.rendered}`));
+            box.appendChild(line);
+        } else if (state.lib.hoursErr) {
+            box.appendChild(el("div", "lib-hours muted", "Library hours unavailable right now"));
+        } else {
+            box.appendChild(el("div", "lib-hours muted", "Loading official hours…"));
+        }
+        if (s.id === "central-library") {
+            const c = state.lib.occ ? MP.libraryCrowd(state.lib.occ.count) : null;
+            if (c && today && today.openNow) {
+                const g = el("div", `lib-gauge ${c.level}`);
+                const top = el("div", "lib-gauge-top");
+                top.append(el("span", "lib-count", `${c.count.toLocaleString()}`), el("span", "lib-count-label", `people inside · ${c.label}`));
+                g.appendChild(top);
+                const bar = el("div", "lib-bar"); const fillEl = el("span"); fillEl.style.width = `${Math.max(3, c.pct)}%`; bar.appendChild(fillEl);
+                g.appendChild(bar);
+                g.appendChild(el("div", "lib-src", `Live door count from UTA Libraries · ${MP.minutesAgo(state.lib.occ.at, now())}`));
+                box.appendChild(g);
+            } else if (c && today && !today.openNow) {
+                box.appendChild(el("div", "lib-src", "Live headcount resumes when the library opens."));
+            } else if (state.lib.occErr) {
+                const a = el("a", "text-btn", "See the live headcount on UTA Libraries"); a.href = window.MP_LIB.OCCUPANCY_PAGE; a.target = "_blank"; a.rel = "noopener";
+                box.appendChild(a);
+            }
+        }
+        return box;
+    }
+    function lastStudyReport(s) {
+        const mine = allReports().filter(r => r.type === "study" && r.targetId === s.id).sort((a, b) => b.at - a.at);
+        return mine[0] || null;
+    }
     function renderStudy() {
         const list = $("study-list");
         list.innerHTML = "";
         let shown = 0;
         D.STUDY_SPOTS.forEach(s => {
             const st = studyState(s);
-            if (studyOnlyOpen && !(st.source === "live" && st.status === "open")) return;
+            const lid = window.MP_LIB && window.MP_LIB.LIBCAL_IDS[s.id];
+            const libOpen = lid && state.lib.hours && MP.libraryToday(state.lib.hours, lid, now()).openNow;
+            if (studyOnlyOpen && !(st.source === "live" && st.status === "open") && !libOpen) return;
             shown += 1;
-            const card = el("div", "study-card" + (st.source === "live" ? " has-live-report" : ""));
-            card.appendChild(el("div", "card-title-main", s.name));
-            const label = el("div", "study-status " + (st.source === "live" ? st.status : "none"), studyLabel(s, st));
-            card.appendChild(label);
+            const card = el("div", "study-card" + (st.source === "live" ? " has-live-report" : "") + (lid ? " is-library" : ""));
+            const head = el("div", "study-head");
+            head.appendChild(el("div", "card-title-main", s.name));
+            if (lid) head.appendChild(el("span", "official-tag", "Official data"));
+            card.appendChild(head);
+            const lib = libraryBlock(s);
+            if (lib) card.appendChild(lib);
+            let text = studyLabel(s, st);
+            if (st.source !== "live") {
+                const last = lastStudyReport(s);
+                text = last ? `Students: last report was ${MP.minutesAgo(last.at, now())} (${last.status})` : "Students: no reports yet, be the first";
+            } else text = `Students: ${text}`;
+            card.appendChild(el("div", "study-status " + (st.source === "live" ? st.status : "none"), text));
             const row = el("div", "study-report-row");
             row.appendChild(el("span", "study-report-prompt", "Here now?"));
-            [["busy", "It's busy"], ["open", "It's open"]].forEach(([status, text]) => {
-                const b = el("button", "study-report-btn", text); b.type = "button";
+            [["busy", "It's busy"], ["open", "Seats open"]].forEach(([status, label]) => {
+                const b = el("button", "study-report-btn", label); b.type = "button";
                 b.addEventListener("click", () => submit({ type: "study", targetId: s.id, status, label: s.name, lat: s.lat, lng: s.lng }, `Thanks! ${s.name} marked ${status}.`));
                 row.appendChild(b);
             });
             card.appendChild(row);
             list.appendChild(card);
         });
-        if (!shown) list.appendChild(el("p", "study-empty-state", "Nobody has reported an open spot in the last hour. Be the first: tap \"It's open\" where you are."));
+        if (!shown) list.appendChild(el("p", "study-empty-state", "No library is open and nobody has reported open seats in the last hour. Be the first: tap \"Seats open\" where you are."));
     }
 
     // ======================================================================
@@ -851,6 +925,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
         try {
             const res = await fetch(`https://api.open-meteo.com/v1/forecast?${p}`);
+            logSource("weather", `https://api.open-meteo.com/v1/forecast?${p}`, res.ok, 1);
             if (!res.ok) throw new Error(res.status);
             const d = await res.json();
             const [cond] = WX[d.current.weather_code] || ["Current conditions", ""];
@@ -899,8 +974,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     async function loadNws() {
         try {
             const res = await fetch(`${NWS}/alerts/active?area=TX`, { headers: { Accept: "application/geo+json" } });
-            if (!res.ok) throw new Error(res.status);
+            if (!res.ok) { logSource("nws", `${NWS}/alerts/active?area=TX`, false, 0); throw new Error(res.status); }
             const data = await res.json();
+            logSource("nws", `${NWS}/alerts/active?area=TX`, true, (data.features || []).length);
             const features = (data.features || []).filter(f => MP.filterCampusAlerts([f], ["tarrant", "arlington"]).length);
             state.nwsAlerts = MP.filterCampusAlerts(features, ["tarrant", "arlington"]);
             renderNws();
@@ -1065,11 +1141,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     // ======================================================================
     //  POINTS / MOTIVATION
     // ======================================================================
+    state.lbPeriod = "week";
     function renderPoints() {
         const s = MP.contributorStats(state.weekReports || state.reports, state.uid);
-        const reports = state.weekReports || [];
-        const board = MP.weeklyLeaderboard(reports, profilesInGroup(state.profiles, true), now());
-        const other = MP.weeklyLeaderboard(reports, profilesInGroup(state.profiles, false), now());
+        const semester = state.lbPeriod === "semester" && state.semReports;
+        const reports = semester ? state.semReports : (state.weekReports || []);
+        const windowMs = semester ? MP.SEMESTER_WINDOW_MS : MP.LEADERBOARD_WINDOW_MS;
+        const board = MP.leaderboard(reports, profilesInGroup(state.profiles, true), now(), windowMs);
+        const other = MP.leaderboard(reports, profilesInGroup(state.profiles, false), now(), windowMs);
+        const myAcc = MP.reporterAccuracy(state.semReports || state.weekReports || state.reports, state.uid);
         const mine = board.find(r => r.uid === state.uid) || other.find(r => r.uid === state.uid);
         const today = MP.activeReports(state.reports, now(), 24 * 60 * MIN);
         const people = new Set(today.map(r => r.reporterId)).size;
@@ -1084,6 +1164,9 @@ document.addEventListener("DOMContentLoaded", async () => {
             fillEl.style.width = `${Math.min(100, Math.round(((s.points - lo) / Math.max(1, hi - lo)) * 100))}%`;
             bar.appendChild(fillEl); card.appendChild(bar);
             card.appendChild(el("div", "points-sub", `${s.reports} report${s.reports === 1 ? "" : "s"} · ${s.confirmed} backed up by another commuter (+5 each)`));
+            card.appendChild(el("div", "points-sub accuracy", myAcc.pct !== null
+                ? `Accuracy ${myAcc.pct}%${myAcc.badge ? ` · ${myAcc.badge}` : ""} (${myAcc.backed} backed up, ${myAcc.disputed} disputed)`
+                : `Accuracy shows after ${myAcc.need} more of your reports ${myAcc.need === 1 ? "is" : "are"} checked by someone else`));
             card.appendChild(el("div", "points-sub", `Community today: ${today.length} report${today.length === 1 ? "" : "s"} from ${people} commuter${people === 1 ? "" : "s"}`));
             const onUta = board.some(r => r.uid === state.uid);
             if (mine) card.appendChild(el("div", "points-sub rank", `#${mine.rank} on the ${onUta ? "UTA" : "other"} board`));
@@ -1114,15 +1197,21 @@ document.addEventListener("DOMContentLoaded", async () => {
             return;
         }
         if (!board.length) {
-            list.appendChild(el("li", "lb-empty", label === "UTA"
-                ? "No UTA names yet this week."
-                : "No other accounts on the board yet this week."));
+            const when = state.lbPeriod === "semester" ? "this semester" : "this week";
+            const li = el("li", "lb-empty", label === "UTA"
+                ? `No UTA names yet ${when}. `
+                : `No other accounts on the board yet ${when}. `);
+            const inv = el("button", "text-btn", "Invite classmates"); inv.type = "button"; inv.addEventListener("click", openInvite);
+            li.appendChild(inv);
+            list.appendChild(li);
             return;
         }
         const row = r => {
             const li = el("li", `top${r.rank}${r.uid === state.uid ? " me" : ""}`);
             const name = el("div", "lb-name", r.uid === state.uid ? `${r.name} (you)` : r.name);
-            name.appendChild(el("small", null, `${r.level} · ${r.reports} report${r.reports === 1 ? "" : "s"}`));
+            const acc = r.accuracy && r.accuracy.pct !== null ? ` · ${r.accuracy.pct}% accurate` : "";
+            name.appendChild(el("small", null, `${r.level} · ${r.reports} report${r.reports === 1 ? "" : "s"}${acc}`));
+            if (r.accuracy && r.accuracy.badge) name.appendChild(el("span", `acc-badge ${r.accuracy.badge === "Trusted" ? "good" : "warn"}`, r.accuracy.badge));
             li.append(el("span", "lb-rank", String(r.rank)), name, el("span", "lb-pts", `${r.points} pts`));
             return li;
         };
@@ -1130,6 +1219,47 @@ document.addEventListener("DOMContentLoaded", async () => {
         const meIdx = board.findIndex(r => r.uid === state.uid);
         if (meIdx >= 10) { list.appendChild(el("li", "gap", "· · ·")); list.appendChild(row(board[meIdx])); }
     }
+
+    let semLoadedAt = 0;
+    async function loadSemester() {
+        if (!store || !store.getReportsSince || now() - semLoadedAt < 5 * MIN) return;
+        semLoadedAt = now();
+        try { state.semReports = await store.getReportsSince(now() - MP.SEMESTER_WINDOW_MS); }
+        catch (e) { console.warn("Semester board unavailable", e); semLoadedAt = 0; }
+        renderPoints();
+    }
+    document.querySelectorAll("#lb-period button").forEach(b => b.addEventListener("click", () => {
+        state.lbPeriod = b.dataset.period;
+        document.querySelectorAll("#lb-period button").forEach(x => { const on = x === b; x.classList.toggle("on", on); x.setAttribute("aria-checked", String(on)); });
+        if (state.lbPeriod === "semester") loadSemester();
+        renderPoints();
+    }));
+
+    // Invite: the phone's share sheet when there is one, plus a QR code to
+    // show a classmate in person (icons/invite-qr.svg encodes the app link).
+    function openInvite() {
+        const url = D.LINKS.appUrl + "?ref=invite";
+        openExtra("Invite classmates", body => {
+            body.appendChild(el("p", "section-hint", "Every new reporter makes alerts faster for everyone: a train is confirmed as soon as two people report it. Have a classmate scan this, or send the link."));
+            const qr = el("img", "invite-qr"); qr.src = "icons/invite-qr.svg"; qr.alt = "QR code that opens MavPulse"; qr.width = 220; qr.height = 220;
+            body.appendChild(qr);
+            body.appendChild(el("div", "invite-url", D.LINKS.appUrl.replace(/^https:\/\//, "")));
+            const row = el("div", "invite-actions");
+            if (navigator.share) {
+                const share = el("button", "small-btn", "Share link"); share.type = "button";
+                share.addEventListener("click", () => navigator.share({ title: "MavPulse", text: MP.inviteText(url), url }).catch(() => {}));
+                row.appendChild(share);
+            }
+            const copy = el("button", "pill-btn", "Copy link"); copy.type = "button";
+            copy.addEventListener("click", () => (navigator.clipboard ? navigator.clipboard.writeText(MP.inviteText(url)) : Promise.reject()).then(() => toast("Invite copied", "ok"), () => toast("Couldn't copy", "warn")));
+            row.appendChild(copy);
+            const text = el("a", "pill-btn", "Text it"); text.href = `sms:?&body=${encodeURIComponent(MP.inviteText(url))}`;
+            row.appendChild(text);
+            body.appendChild(row);
+            body.appendChild(el("p", "source-note", "No app store needed: iPhone Safari → Share → Add to Home Screen. Android Chrome → ⋮ → Install app."));
+        });
+    }
+    document.querySelectorAll("[data-invite]").forEach(b => b.addEventListener("click", openInvite));
 
     const PENDING_NAME = "mavpulse-pending-name";
     function pendingName(v) {
@@ -1385,6 +1515,89 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!profileOpen) bd.classList.remove("open");
         setTimeout(() => { sh.hidden = true; if ($("profile-sheet").hidden) bd.hidden = true; }, reduceMotion ? 0 : 260);
     }
+    // ======================================================================
+    //  WHERE THIS DATA COMES FROM (every feed, with its exact query)
+    // ======================================================================
+    function openSources() {
+        const city = (window.MP_CITY && window.MP_CITY.lastQuery) || {};
+        const lib = (window.MP_LIB && window.MP_LIB.lastQuery) || {};
+        const since = new Date(now() - 12 * 3600 * 1000).toISOString();
+        const SOURCES = [
+            { group: "Crowd reports (MavPulse users)" },
+            { title: "Train crossings, closures, study spots", provider: "MavPulse users → Firebase Firestore",
+              how: "Live listener: every phone gets new reports within about a second.",
+              query: `Firestore: reports where at >= ${since} order by at desc limit 500`,
+              rows: (state.reports || []).length, ok: state.mode === "shared", at: state.lastLiveAt || null,
+              note: "Two different people within 5 minutes confirm a train. Reports expire (trains 20 min, closures 12 h, study 60 min)." },
+            { title: "Campus updates and MavAlert relays", provider: "MavPulse campus moderators → Firestore",
+              how: "Live listener, newest 10.", query: "Firestore: updates order by at desc limit 10", rows: (state.updates || []).length, ok: state.mode === "shared" },
+            { group: "City of Arlington (official, public GIS)" },
+            { title: "City road work", provider: "City of Arlington · right-of-way permits",
+              how: "Refreshed every 30 min. Only permits with barricades up today, inside the campus area.", log: city.roadwork, page: D.LINKS.cityGisLayer,
+              note: "These are barricade permits: lane, sidewalk and full closures. The city's Street Closure List is a separate, hand-edited PDF of major closures, so the two lists differ.",
+              extra: ["Open the city's Street Closure List", D.LINKS.cityStreetClosures] },
+            { title: "Active police calls", provider: "Arlington Police Department",
+              how: "City updates it every 15 min. Loads when you turn on Map → Safety.", log: city.policeCalls },
+            { title: "Reported offenses (30 days)", provider: "Arlington Police Department",
+              how: "Updated nightly. UTA Police cases are not in this dataset.", log: city.crime, extra: ["Arlington crime search", D.LINKS.cityCrimeSearch] },
+            { title: "Union Pacific track line", provider: "City of Arlington GIS", how: "Loaded once.", log: city.rail },
+            { group: "UTA (official)" },
+            { title: "Central Library live headcount", provider: "UTA Libraries door counter, through the MavPulse relay",
+              how: "Relay caches 60 s, so UTA's server sees at most one request a minute.", log: lib.occupancy, page: window.MP_LIB && window.MP_LIB.OCCUPANCY_PAGE },
+            { title: "Library hours", provider: "UTA Libraries (LibCal)", how: "Refreshed every 30 min.", log: lib.hours, page: D.LINKS.libraryHoursPage },
+            { title: "MavMover live buses", provider: "UTA's TripShot rider feed, through the MavPulse relay",
+              how: "Every 15 s while you watch buses, else every 60 s. Relay caches 10 s.", log: sourceLog.tripshot, page: D.LINKS.tripshot },
+            { title: "Parking areas and permits", provider: "OpenStreetMap outlines + UTA PATS 2026–27 permit guide",
+              how: "Built into the app. Live space counts are UTA's Parking Finder.", extra: ["Open UTA Parking Finder", D.LINKS.parkingFinder] },
+            { group: "Weather" },
+            { title: "Weather alerts", provider: "National Weather Service", how: "Every 5 min, filtered to Tarrant County / Arlington.", log: sourceLog.nws },
+            { title: "Current weather", provider: "Open-Meteo", how: "Every 15 min.", log: sourceLog.weather }
+        ];
+        openExtra("Where this data comes from", body => {
+            body.appendChild(el("p", "section-hint", "Every feed MavPulse uses, with the exact query it just ran. Tap a query to open it yourself. Nothing here is estimated or made up."));
+            SOURCES.forEach(src => {
+                if (src.group) { body.appendChild(el("h3", "src-group", src.group)); return; }
+                const card = el("div", "src-card");
+                const head = el("div", "src-head");
+                head.appendChild(el("strong", null, src.title));
+                const log = src.log;
+                const ok = log ? log.ok : src.ok;
+                const at = log ? log.at : src.at;
+                const rows = log ? log.rows : src.rows;
+                let status = "Built in", cls = "static";
+                const live = `Live${at ? " · " + MP.minutesAgo(at, now()) : ""}${typeof rows === "number" ? ` · ${rows} item${rows === 1 ? "" : "s"}` : ""}`;
+                if ("log" in src) {
+                    if (!log) { status = "Not loaded yet"; cls = "idle"; }
+                    else if (!log.ok) { status = "Unavailable"; cls = "bad"; }
+                    else { status = live; cls = "ok"; }
+                } else if (src.query) {
+                    if (src.ok) { status = live; cls = "ok"; } else { status = "On-device mode"; cls = "idle"; }
+                }
+                head.appendChild(el("span", `src-status ${cls}`, status));
+                card.appendChild(head);
+                card.appendChild(el("div", "src-provider", src.provider));
+                card.appendChild(el("div", "src-how", src.how));
+                const q = log ? log.url : src.query;
+                if (q) {
+                    const qBox = el(/^https?:/.test(q) ? "a" : "div", "src-query", q);
+                    if (qBox.tagName === "A") { qBox.href = q; qBox.target = "_blank"; qBox.rel = "noopener"; }
+                    card.appendChild(qBox);
+                    const copy = el("button", "text-btn src-copy", "Copy query"); copy.type = "button";
+                    copy.addEventListener("click", () => { (navigator.clipboard ? navigator.clipboard.writeText(q) : Promise.reject()).then(() => toast("Query copied", "ok"), () => toast("Couldn't copy", "warn")); });
+                    card.appendChild(copy);
+                }
+                if (src.note) card.appendChild(el("p", "src-note", src.note));
+                const links = el("div", "src-links");
+                if (src.page) { const a = el("a", "text-btn", "Source page"); a.href = src.page; a.target = "_blank"; a.rel = "noopener"; links.appendChild(a); }
+                if (src.extra) { const a = el("a", "text-btn", src.extra[0]); a.href = src.extra[1]; a.target = "_blank"; a.rel = "noopener"; links.appendChild(a); }
+                if (links.childNodes.length) card.appendChild(links);
+                body.appendChild(card);
+            });
+            body.appendChild(el("p", "source-note", "Hosting and backend run on free tiers (GitHub Pages, Firebase Spark, Cloudflare Workers). Map data © OpenStreetMap contributors."));
+        });
+    }
+    document.querySelectorAll("[data-open-sources]").forEach(b => b.addEventListener("click", e => { e.preventDefault(); openSources(); }));
+
     function openCommute() {
         let draft = state.commute ? JSON.parse(JSON.stringify(state.commute)) : MP.defaultCommute("west");
         const paint = () => openExtra("My commute", body => {
@@ -1567,11 +1780,23 @@ document.addEventListener("DOMContentLoaded", async () => {
     $("sheet-backdrop").addEventListener("click", () => { if (!$("extra-sheet").hidden) closeExtra(); else closeSheet(); });
     $("admin-volunteer").href = D.LINKS.teamEmail;
 
+    state.moderators = null;
+    function renderModerators() {
+        const box = $("mod-count");
+        if (!box) return;
+        const list = state.moderators;
+        if (!list) { box.textContent = ""; return; }
+        const names = list.map(m => MP.cleanDisplayName(m.name)).filter(Boolean);
+        const lastPost = (state.updates || []).reduce((t, u) => Math.max(t, u.at || 0), 0);
+        box.textContent = `${list.length} moderator${list.length === 1 ? "" : "s"} right now${names.length ? ` (${names.join(", ")})` : ""}.${lastPost ? ` Last campus update ${MP.minutesAgo(lastPost, now())}.` : ""}`;
+    }
     function renderAdmin() {
+        if (store.isAdmin && $("mod-fold")) $("mod-fold").open = true;
+        renderModerators();
         $("admin-area").hidden = !!store.isAdmin;
         $("admin-panel").hidden = !store.isAdmin;
         if (store.isAdmin) $("admin-who").textContent = store.adminEmail || "admin";
-        if (state.mode !== "shared") $("admin-msg").textContent = "Admin features need the shared backend (currently on-device mode).";
+        if (state.mode !== "shared") $("admin-msg").textContent = "Moderator features need the shared backend (currently on-device mode).";
         const demo = new URLSearchParams(location.search).get("demo") === "1";
         $("test-mode").hidden = !(demo || store.isAdmin);
     }
@@ -1581,7 +1806,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         try {
             await store.adminSignIn($("admin-email").value.trim(), $("admin-pass").value);
             state.uid = store.uid; renderAccount();
-            $("admin-msg").textContent = "Welcome, admin.";
+            $("admin-msg").textContent = "Welcome, moderator.";
             $("admin-pass").value = "";
         } catch (err) { $("admin-msg").textContent = err.message || "Sign-in failed."; }
         renderAdmin(); renderAll();
@@ -1802,6 +2027,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadRoadWork();
     loadRail();
     loadLive().then(scheduleLive);
+    loadLibraries();
+    setInterval(() => { if (currentView === "study" && document.visibilityState !== "hidden") loadLibraries(); }, 2 * 60 * 1000);
 
     // Connect the store (shared backend if configured, else on-device).
     const { store: s, info } = await window.MP_STORE.createReportStore(window.MAVPULSE_FIREBASE_CONFIG);
@@ -1826,6 +2053,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (info.mode === "shared") {
         store.onWeekReports(list => { state.weekReports = list; renderPoints(); });
         store.onProfiles(map => { state.profiles = map; renderPoints(); renderAccount(); });
+        if (store.onModerators) store.onModerators(list => { state.moderators = list; renderModerators(); });
         // Came back from the verification link? Pick it up automatically.
         if (store.account && !store.account.verified) store.checkVerified().then(ok => { if (ok) afterVerified(); renderAccount(); renderAll(); }).catch(() => {});
         document.addEventListener("visibilitychange", () => {

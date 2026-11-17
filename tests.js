@@ -473,6 +473,91 @@
         assert(h.waze.indexOf("waze.com") !== -1, "waze");
     });
 
+    // ===================== Iteration 4: libraries, accuracy, boards =====================
+    // Fixture copied from UTA Libraries' LibCal feed (Mon Nov 16 / Sat Nov 21, 2026).
+    const LIBCAL = {"locations":[{"lid":13818,"name":"Central Library","weeks":[{"Monday":{"date":"2026-11-16","times":{"status":"open","hours":[{"from":"6:30am","to":"12am"}],"currently_open":true},"rendered":"6:30am - 12am"},"Saturday":{"date":"2026-11-21","times":{"status":"open","hours":[{"from":"9am","to":"10pm"}],"currently_open":false},"rendered":"9am - 10pm"}}]},{"lid":17028,"name":"Science and Engineering Library","weeks":[{"Monday":{"date":"2026-11-16","times":{"status":"open","hours":[{"from":"9am","to":"8pm"}],"currently_open":true},"rendered":"9am - 8pm"},"Saturday":{"date":"2026-11-21","times":{"status":"closed","currently_open":false},"rendered":"Closed"}}]}]};
+    const CT = s => new Date(s + "-06:00").getTime();
+    test("Libraries: clock parsing treats a 12am closing time as midnight", () => {
+        eq(MP.parseClock("6:30am"), 390);
+        eq(MP.parseClock("12pm"), 720);
+        eq(MP.parseClock("12am", true), 1440);
+        eq(MP.parseClock("12am"), 0);
+        eq(MP.parseClock("soon"), null);
+    });
+    test("Libraries: Central is open at 7:30 PM on Monday, until 12am", () => {
+        const t = MP.libraryToday(LIBCAL, 13818, CT("2026-11-16T19:30:00"));
+        eq(t.openNow, true); eq(t.label, "Open until 12am");
+    });
+    test("Libraries: before opening says when it opens", () => {
+        const t = MP.libraryToday(LIBCAL, 13818, CT("2026-11-16T05:45:00"));
+        eq(t.openNow, false); eq(t.label, "Opens at 6:30am");
+    });
+    test("Libraries: Science & Engineering closes at 8 PM and is closed Saturday", () => {
+        eq(MP.libraryToday(LIBCAL, 17028, CT("2026-11-16T20:00:00")).openNow, false);
+        eq(MP.libraryToday(LIBCAL, 17028, CT("2026-11-16T20:00:00")).label, "Closed for the day");
+        const sat = MP.libraryToday(LIBCAL, 17028, CT("2026-11-21T12:00:00"));
+        eq(sat.status, "closed"); eq(sat.label, "Closed today");
+    });
+    test("Libraries: uses Arlington time even when the phone is in another zone", () => {
+        // 01:30 UTC Tue = 7:30 PM Mon in Arlington.
+        eq(MP.chicagoParts(Date.UTC(2026, 10, 17, 1, 30)).date, "2026-11-16");
+        eq(MP.libraryToday(LIBCAL, 13818, Date.UTC(2026, 10, 17, 1, 30)).openNow, true);
+    });
+    test("Libraries: unknown location or date is reported as not found", () => {
+        eq(MP.libraryToday(LIBCAL, 999, CT("2026-11-16T12:00:00")).found, false);
+        eq(MP.libraryToday(LIBCAL, 13818, CT("2026-12-25T12:00:00")).found, false);
+        eq(MP.libraryToday(null, 13818, CT("2026-11-16T12:00:00")).found, false);
+    });
+    test("Libraries: headcount uses UTA Libraries' own gauge bands", () => {
+        eq(MP.libraryCrowd(447).label, "Plenty of room");
+        eq(MP.libraryCrowd(600).level, "medium");
+        eq(MP.libraryCrowd(1200).label, "Busy");
+        eq(MP.libraryCrowd(1500).level, "full");
+        eq(MP.libraryCrowd(2000).pct, 100);
+        eq(MP.libraryCrowd("n/a"), null);
+        eq(MP.libraryCrowd(-5), null);
+    });
+    const crx = (who, status, m, id) => ({ type: "crossing", targetId: id || "cooper", status, reporterId: who, at: min(m) });
+    test("Accuracy: backed-up and disputed reports are counted separately", () => {
+        const reports = [
+            crx("a", "blocked", 0), crx("b", "blocked", 2),                 // backed
+            crx("a", "blocked", 60, "davis"), crx("c", "clear", 62, "davis"),  // disputed
+            crx("a", "blocked", 120, "center"),                               // nobody checked
+            crx("a", "blocked", 200), crx("d", "blocked", 201)                // backed
+        ];
+        const acc = MP.reporterAccuracy(reports, "a");
+        eq(acc.backed, 2); eq(acc.disputed, 1); eq(acc.checked, 3); eq(acc.pct, 67);
+    });
+    test("Accuracy: hidden until 3 reports were checked by someone else", () => {
+        const acc = MP.reporterAccuracy([crx("a", "blocked", 0), crx("b", "blocked", 1)], "a");
+        eq(acc.pct, null); eq(acc.need, 2);
+    });
+    test("Accuracy: 80%+ earns Trusted, under 50% is flagged", () => {
+        const good = [0, 30, 60].flatMap(m => [crx("a", "blocked", m), crx("b", "blocked", m + 1)]);
+        eq(MP.reporterAccuracy(good, "a").badge, "Trusted");
+        const bad = [0, 30, 60].flatMap(m => [crx("a", "blocked", m), crx("b", "clear", m + 1)]);
+        eq(MP.reporterAccuracy(bad, "a").pct, 0);
+        eq(MP.reporterAccuracy(bad, "a").badge, "Often disputed");
+    });
+    test("Accuracy: a report 10 minutes later doesn't count as a check", () => {
+        eq(MP.reporterAccuracy([crx("a", "blocked", 0), crx("b", "clear", 10)], "a").checked, 0);
+    });
+    test("Leaderboard: semester board keeps reporters the weekly board drops", () => {
+        const now = min(0);
+        const old = { type: "crossing", targetId: "cooper", status: "blocked", reporterId: "a", at: now - 20 * 24 * 3600 * 1000 };
+        const profiles = { a: { name: "Ana", show: true } };
+        eq(MP.weeklyLeaderboard([old], profiles, now).length, 0);
+        const sem = MP.leaderboard([old], profiles, now, MP.SEMESTER_WINDOW_MS);
+        eq(sem.length, 1); eq(sem[0].name, "Ana");
+        assert(sem[0].accuracy && sem[0].accuracy.pct === null, "accuracy attached");
+    });
+    test("Invite text includes the link", () => {
+        assert(MP.inviteText("https://x.test/").indexOf("https://x.test/") !== -1);
+    });
+    test("Parking Finder link points at the live finder, not the dead shortlink", () => {
+        assert(D.LINKS.parkingFinder.indexOf("uta.modii.co") !== -1, D.LINKS.parkingFinder);
+    });
+
     // ===================== report =====================
     Promise.all(pending).then(() => {
         const passed = results.filter(r => r.passed).length;

@@ -511,22 +511,110 @@
     }
 
     function weeklyLeaderboard(reports, profiles, now) {
-        const since = now - LEADERBOARD_WINDOW_MS;
-        const week = (reports || []).filter(r => r && r.at >= since && r.at <= now + MINUTE);
-        const ids = new Set(week.map(r => r.reporterId));
+        return leaderboard(reports, profiles, now, LEADERBOARD_WINDOW_MS);
+    }
+
+    // Leaderboard over any window (weekly or semester). Each row also carries
+    // the reporter's accuracy: of their reports that someone else checked,
+    // how many were backed up rather than contradicted.
+    const SEMESTER_WINDOW_MS = 120 * 24 * 60 * MINUTE;
+    function leaderboard(reports, profiles, now, windowMs) {
+        const since = now - (windowMs || LEADERBOARD_WINDOW_MS);
+        const inWindow = (reports || []).filter(r => r && r.at >= since && r.at <= now + MINUTE);
+        const ids = new Set(inWindow.map(r => r.reporterId));
         const rows = [];
         ids.forEach(uid => {
             const p = profiles && profiles[uid];
             if (!p || p.show === false) return;
             const name = cleanDisplayName(p.name);
             if (!name) return;
-            const s = contributorStats(week, uid);
-            if (s.points > 0) rows.push({ uid, name, points: s.points, reports: s.reports, level: s.level });
+            const s = contributorStats(inWindow, uid);
+            if (s.points > 0) rows.push({ uid, name, points: s.points, reports: s.reports, level: s.level, accuracy: reporterAccuracy(inWindow, uid) });
         });
         rows.sort((a, b) => b.points - a.points || b.reports - a.reports || a.name.localeCompare(b.name));
         let rank = 0, prev = null;
         rows.forEach((r, i) => { if (r.points !== prev) { rank = i + 1; prev = r.points; } r.rank = rank; });
         return rows;
+    }
+
+    // ---- Reporter accuracy (rating users on correct reports) ----
+    // A report is "backed up" when someone else reports the same thing at the
+    // same place within the confirmation window, and "disputed" when someone
+    // else reports the opposite there within that window (blocked vs clear,
+    // busy vs open). Reports nobody checked count for neither. Accuracy is
+    // backed / (backed + disputed), shown once at least ACCURACY_MIN_CHECKED
+    // reports were checked, so one unlucky report can't sink a newcomer.
+    const ACCURACY_MIN_CHECKED = 3;
+    const OPPOSITE = { blocked: "clear", clear: "blocked", busy: "open", open: "busy" };
+    function reporterAccuracy(reports, reporterId) {
+        const all = reports || [];
+        const win = RULES.CONFIRMATION_WINDOW_MS;
+        let backed = 0, disputed = 0;
+        all.filter(r => r && r.reporterId === reporterId).forEach(r => {
+            const others = all.filter(o => o && o.reporterId !== reporterId && o.type === r.type
+                && o.targetId === r.targetId && Math.abs(o.at - r.at) <= win);
+            if (others.some(o => o.status === r.status)) backed += 1;
+            else if (OPPOSITE[r.status] && others.some(o => o.status === OPPOSITE[r.status])) disputed += 1;
+        });
+        const checked = backed + disputed;
+        const pct = checked >= ACCURACY_MIN_CHECKED ? Math.round((backed / checked) * 100) : null;
+        let badge = null;
+        if (pct !== null) badge = pct >= 80 ? "Trusted" : pct < 50 ? "Often disputed" : null;
+        return { backed, disputed, checked, pct, badge, need: Math.max(0, ACCURACY_MIN_CHECKED - checked) };
+    }
+
+    // =================================================================
+    //  UTA Libraries: official hours (LibCal) + live Central Library count
+    // =================================================================
+    // Wall-clock date and minutes in Arlington, whatever the phone's zone is.
+    function chicagoParts(now) {
+        const f = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23", weekday: "long" });
+        const p = {}; f.formatToParts(new Date(now)).forEach(x => { p[x.type] = x.value; });
+        return { date: `${p.year}-${p.month}-${p.day}`, minutes: Number(p.hour) * 60 + Number(p.minute), weekday: p.weekday };
+    }
+    // "6:30am" -> 390. An end time of "12am" means midnight at the end of the day.
+    function parseClock(text, isEnd) {
+        const m = /^\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*$/i.exec(String(text || ""));
+        if (!m) return null;
+        let h = Number(m[1]) % 12; const min = Number(m[2] || 0);
+        if (/pm/i.test(m[3])) h += 12;
+        const total = h * 60 + min;
+        return isEnd && total === 0 ? 24 * 60 : total;
+    }
+    // Today's hours for one LibCal location: { found, status, rendered, openNow, label }.
+    function libraryToday(grid, lid, now) {
+        const loc = grid && (grid.locations || []).find(l => Number(l.lid) === Number(lid));
+        if (!loc) return { found: false };
+        const { date, minutes } = chicagoParts(now);
+        let day = null;
+        (loc.weeks || []).forEach(w => Object.values(w || {}).forEach(d => { if (d && d.date === date) day = d; }));
+        if (!day) return { found: false };
+        const t = day.times || {};
+        if (t.status !== "open" && t.status !== "24hours") {
+            return { found: true, status: "closed", rendered: day.rendered || "Closed", openNow: false, label: "Closed today" };
+        }
+        if (t.status === "24hours") return { found: true, status: "open", rendered: "Open 24 hours", openNow: true, label: "Open 24 hours" };
+        const spans = (t.hours || []).map(h => ({ from: parseClock(h.from), to: parseClock(h.to, true), toText: h.to, fromText: h.from }))
+            .filter(h => h.from !== null && h.to !== null);
+        const cur = spans.find(h => minutes >= h.from && minutes < h.to);
+        if (cur) return { found: true, status: "open", rendered: day.rendered, openNow: true, label: `Open until ${cur.toText}` };
+        const next = spans.find(h => minutes < h.from);
+        return { found: true, status: "open", rendered: day.rendered, openNow: false, label: next ? `Opens at ${next.fromText}` : "Closed for the day" };
+    }
+    // UTA Libraries' own gauge for Central Library: 0-1550 people, colored
+    // green < 600, yellow < 1000, orange < 1400, red above. Same bands here.
+    const CENTRAL_LIBRARY_GAUGE_MAX = 1550;
+    function libraryCrowd(count) {
+        const n = Number(count);
+        if (!Number.isFinite(n) || n < 0) return null;
+        const level = n < 600 ? "low" : n < 1000 ? "medium" : n < 1400 ? "high" : "full";
+        const label = { low: "Plenty of room", medium: "Filling up", high: "Busy", full: "Very busy" }[level];
+        return { count: Math.round(n), level, label, pct: Math.min(100, Math.round((n / CENTRAL_LIBRARY_GAUGE_MAX) * 100)) };
+    }
+
+    // Short invite text for sharing the app.
+    function inviteText(url) {
+        return `MavPulse shows UTA train crossings, closures, live MavMover buses and how full the library is. Free, no app store: ${url}`;
     }
 
     // Saved commute. Direction only picks a starting set of crossings;
@@ -640,7 +728,8 @@
         activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards, commuterBar, shouldPostLockNote,
         TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute,
         LEADERBOARD_WINDOW_MS, isUtaEmail, isAccountEmail, profileIsUta, cleanDisplayName, weeklyLeaderboard,
-        defaultCommute, cleanCommute, crossingPattern, typicalBlockMinutes, shouldAlertBefore, detourHandoff, PATTERN_MIN_REPORTS
+        defaultCommute, cleanCommute, crossingPattern, typicalBlockMinutes, shouldAlertBefore, detourHandoff, PATTERN_MIN_REPORTS,
+        leaderboard, SEMESTER_WINDOW_MS, reporterAccuracy, ACCURACY_MIN_CHECKED, chicagoParts, parseClock, libraryToday, libraryCrowd, CENTRAL_LIBRARY_GAUGE_MAX, inviteText
     };
     root.MP = LOGIC;
     // Back-compat names used by the Iteration 2 tests.

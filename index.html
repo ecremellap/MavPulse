@@ -109,13 +109,14 @@
                 <h2 class="section-title">Rail crossings</h2>
                 <p class="section-hint">Stopped by a train? Tap once. A second report confirms it for everyone.</p>
                 <div class="signal-board" id="crossing-list" aria-live="polite"></div>
+                <button class="invite-line" type="button" data-invite>Trains confirm faster with more reporters. <b>Invite a classmate</b></button>
 
                 <h2 class="section-title">Closures reported by commuters</h2>
                 <div id="closure-list" class="report-list"></div>
 
                 <div class="emergency-card">
                     <div class="emergency-title">UTA emergency alerts</div>
-                    <p>Official MavAlerts go out by text and email. Verified MavPulse admins relay them here, but sign up so you never miss one.</p>
+                    <p>Official MavAlerts go out by text and email. Verified MavPulse campus moderators relay them here, but sign up so you never miss one.</p>
                     <div class="row-btns">
                         <a class="pill-btn" id="link-mavalert" target="_blank" rel="noopener">Sign up for MavAlert <svg class="i sm" aria-hidden="true"><use href="#i-ext"/></svg></a>
                         <a class="pill-btn" id="link-emergency" target="_blank" rel="noopener">UTA emergency info <svg class="i sm" aria-hidden="true"><use href="#i-ext"/></svg></a>
@@ -140,11 +141,13 @@
                     </div>
 
                     <h2 class="section-title">City road work</h2>
-                    <p class="section-hint">Barricaded work zones from the City of Arlington's permit data.</p>
+                    <p class="section-hint">Barricaded work zones from the City of Arlington's right-of-way permits near campus. These include lane and sidewalk work, so they differ from the city's <a href="https://www.arlingtontx.gov/City-Services/Transportation-Streets-Traffic/Streets-and-Traffic/Street-Closures" target="_blank" rel="noopener">Street Closure List</a>. <a href="#" data-open-sources>See the exact query</a>.</p>
                     <div id="roadwork-list" class="report-list"><div class="skeleton"></div><div class="skeleton short"></div></div>
 
                     <h2 class="section-title">Campus updates</h2>
                     <div id="update-list" class="report-list"></div>
+
+                    <button class="sources-btn" type="button" data-open-sources><svg class="i sm" aria-hidden="true"><use href="#i-ext"/></svg>Where this data comes from</button>
                 </details>
             </div>
         </section>
@@ -245,9 +248,9 @@
             </div>
             <div class="filter-bar study-filter-bar" aria-label="Study spot filters">
                 <button class="filter-chip active" type="button" data-study-filter="all" aria-pressed="true">All</button>
-                <button class="filter-chip" type="button" data-study-filter="open" aria-pressed="false">Reported open</button>
+                <button class="filter-chip" type="button" data-study-filter="open" aria-pressed="false">Open now</button>
             </div>
-            <div class="study-intro">There is no public seat-count feed for UTA study spaces, so MavPulse only shows what students report. Reports count for 60 minutes and earn you points.</div>
+            <div class="study-intro">Libraries show <b>official UTA Libraries data</b>: today's hours, and a live headcount for Central Library. Other spots rely on student reports, which count for 60 minutes and earn you points.</div>
             <div class="view-body study-list" id="study-list"></div>
         </section>
 
@@ -301,8 +304,14 @@
         <div class="sheet-body">
             <div class="points-card" id="profile-points"></div>
 
-            <h3>Weekly leaderboard</h3>
-            <p class="section-hint">UTA emails and other accounts are ranked on separate boards.</p>
+            <button class="invite-btn" type="button" data-invite><svg class="i sm" aria-hidden="true"><use href="#i-plus"/></svg>Invite classmates</button>
+
+            <h3>Leaderboard</h3>
+            <div class="seg lb-seg" role="radiogroup" aria-label="Leaderboard period" id="lb-period">
+                <button type="button" data-period="week" class="on" aria-checked="true">This week</button>
+                <button type="button" data-period="semester" aria-checked="false">Semester</button>
+            </div>
+            <p class="section-hint">UTA emails and other accounts are ranked on separate boards. <b>Accuracy</b> is how often other commuters backed up your reports instead of contradicting them.</p>
             <h4 class="lb-label">UTA</h4>
             <ol class="leaderboard" id="leaderboard" aria-label="UTA reporters this week"></ol>
             <h4 class="lb-label">Other</h4>
@@ -370,18 +379,26 @@
             <div class="form-msg" id="sim-msg" aria-live="polite"></div>
             </div>
 
-            <h3>Admins</h3>
+            <details class="mod-fold" id="mod-fold">
+            <summary><span>Campus moderators</span><span class="mod-tag">Staff only</span></summary>
             <div id="admin-area">
-                <p class="section-hint">Admins post official campus updates and remove bad reports. We recruit them from UTA commuter groups and ACM; the team adds each one by hand.</p>
+                <p class="section-hint"><b>You don't need this to use MavPulse.</b> Moderators are UTA staff and student-org leaders who keep the shared feed trustworthy:</p>
+                <ul class="mod-list">
+                    <li>Relay official UTA MavAlerts into the app</li>
+                    <li>Post campus updates, like a garage closed for an event</li>
+                    <li>Remove false or abusive reports</li>
+                </ul>
+                <p class="section-hint" id="mod-count"></p>
+                <p class="section-hint">There is no public sign-up: the team adds each moderator by hand, and the database rules refuse anyone who isn't on that list.</p>
                 <form id="admin-form" class="admin-form" autocomplete="on">
-                    <input type="email" id="admin-email" placeholder="Admin email" autocomplete="username" required>
+                    <input type="email" id="admin-email" placeholder="Moderator email" autocomplete="username" required>
                     <input type="password" id="admin-pass" placeholder="Password" autocomplete="current-password" required>
-                    <button class="small-btn" type="submit">Admin sign in</button>
+                    <button class="small-btn" type="submit">Moderator sign in</button>
                 </form>
-                <a class="text-btn" id="admin-volunteer" href="#">Want to be an admin? Email the team</a>
+                <a class="text-btn" id="admin-volunteer" href="#">Work for PATS, UTA Police or a student org? Ask to moderate</a>
             </div>
             <div id="admin-panel" hidden>
-                <p class="section-hint">Signed in as admin: <b id="admin-who"></b></p>
+                <p class="section-hint">Signed in as moderator: <b id="admin-who"></b></p>
                 <form id="update-form" class="admin-form">
                     <input type="text" id="update-title" maxlength="80" placeholder="Update title" required>
                     <textarea id="update-body" maxlength="280" rows="3" placeholder="Message (max 280 characters)" required></textarea>
@@ -390,8 +407,10 @@
                 </form>
                 <button class="text-btn" id="admin-signout" type="button">Sign out</button>
             </div>
+            </details>
             <div class="form-msg" id="admin-msg" aria-live="polite"></div>
 
+            <button class="sources-btn" type="button" data-open-sources>Where this data comes from</button>
             <p class="source-note" id="about-note"></p>
         </div>
     </aside>
@@ -408,6 +427,7 @@
 <script src="logic.js"></script>
 <script src="store.js"></script>
 <script src="citydata.js"></script>
+<script src="libraries.js"></script>
 <script src="script.js"></script>
 </body>
 </html>

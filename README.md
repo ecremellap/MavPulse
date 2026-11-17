@@ -15,7 +15,7 @@ MavPulse is a Progressive Web App, so the same code is the phone app and the web
 
 It opens full screen like a native app and keeps its app shell offline. We chose this over an iOS App Store listing ($99/year) or an Android-only APK (no iPhone users, "unknown app" warnings).
 
-## What's real in Iteration 3
+## What's real (Iteration 4, final)
 
 | Feature | Source | Status |
 |---|---|---|
@@ -26,19 +26,22 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 | Closures (kind + location from a picker, GPS, or map tap — no typing) | Crowd reports | Live, shared |
 | Weather alerts + alert areas on the map | National Weather Service API | Live |
 | Current weather for campus | Open-Meteo | Live |
-| Parking: all 53 UTA parking areas highlighted on the map, garages labeled, student commuter zones, link to UTA Parking Finder for live counts | OpenStreetMap outlines + UTA PATS 2026–27 permit guide | Reference |
-| Study spots: busy / open status from student reports only (no estimate shown) | Crowd reports | Live, shared |
+| Parking: all 53 UTA parking areas highlighted on the map, garages labeled, student commuter zones, link to UTA Parking Finder (uta.modii.co) for live counts | OpenStreetMap outlines + UTA PATS 2026–27 permit guide | Reference |
+| Study spots: official library hours (open now / closes at) and a live Central Library headcount, plus busy / open student reports for every spot | UTA Libraries LibCal hours feed; UTA Libraries door counter via `relay/worker.js`; crowd reports | Live |
 | MavMover live buses on the map and in the Shuttles tab: position, heading, riders on board, next stop and ETA | TripShot public rider feed via `relay/worker.js` (Cloudflare Worker) | Live when the relay is configured; otherwise schedule + TripShot link |
-| Official city road work (barricaded right-of-way permits) on the map and Home | City of Arlington public GIS | Live, refreshed every 30 min |
+| Official city road work (barricaded right-of-way permits) on the map and Home. This is a different dataset from the city's hand-edited Street Closure List PDF, which the app links | City of Arlington public GIS | Live, refreshed every 30 min |
 | Union Pacific track line on the map | City of Arlington public GIS | Live |
 | Safety layer: reported offenses (last 30 days) and active police calls near campus | Arlington Police Department public data | Live (crime nightly, calls every 15 min) |
 | UTA MavAlert relays (verified admins) + MavAlert sign-up and emergency info links | Admin relay; UTA has no public MavAlert feed | Live, shared |
 | Live GPS: blue dot, follow mode, warning when within 1 km of a blocked crossing, closure or road work | Browser geolocation | Live |
 | Morning brief | All of the above | Live |
 | Notifications: Commuter / Quiet / Off | Browser notifications, including lock-screen alerts on supported installed mobile/tablet PWAs while the app runs in the background | Live |
-| Contributor points and levels | Crowd reports | Live |
+| Contributor points, levels and **report accuracy** (backed up vs. contradicted by other commuters; shown after 3 checked reports, "Trusted" at 80%+) | Crowd reports | Live |
+| Leaderboard: This week / Semester | Crowd reports + Firebase | Live, shared |
+| **Where this data comes from**: every feed with the exact query it just ran, refresh rate, last load and row count | All sources | Live |
+| Invite classmates: share sheet, copy/text link, QR code | `icons/invite-qr.svg` | Live |
 | Accounts: any verified email can sign in. `@mavs.uta.edu` and `@uta.edu` rank on the UTA board; every other address ranks on a separate board | Firebase Auth | Live, shared |
-| Admins: post official campus updates, remove bad reports | Firebase Auth + `/admins` allowlist | Live |
+| Campus moderators (staff only, collapsed in Profile): relay MavAlerts, post campus updates, remove bad reports. The app shows how many there are. No public sign-up | Firebase Auth + `/admins` allowlist | Live |
 | Test mode: simulate a train | Local only | Hidden. Open the app with `?demo=1`, or sign in as an admin |
 
 The next-iteration screens from the review deck are in the app now:
@@ -57,22 +60,23 @@ The next-iteration screens from the review deck are in the app now:
 |---|---|
 | `data.js` | Real reference data (crossings, lots, study spots, places, MavMover routes), all coordinates checked against OpenStreetMap |
 | `logic.js` | Every rule as a pure, tested function (confirmation, expiry, anti-spam, schedule, notifications, points, brief) |
-| `citydata.js` | Read-only queries to the City of Arlington's public ArcGIS server (road work, rail line, police calls, crime) |
+| `citydata.js` | Read-only queries to the City of Arlington's public ArcGIS server (road work, rail line, police calls, crime); records each exact query for the data-sources screen |
+| `libraries.js` | UTA Libraries hours (LibCal JSONP) and the live Central Library headcount (through the relay) |
 | `parking-areas.js` | Outlines of every parking area inside the UTA campus boundary (OpenStreetMap) |
 | `detours.js` | Street-following detour routes around each crossing (OpenStreetMap/OSRM) |
-| `relay/worker.js` | Cloudflare Worker that lets the app read TripShot's public bus feed (CORS) |
+| `relay/worker.js` | Cloudflare Worker that lets the app read TripShot's public bus feed and UTA Libraries' headcount (CORS), cached 10 s / 60 s |
 | `store.js` | `ReportStore` interface with two implementations: `FirebaseReportStore` (shared) and `LocalReportStore` (fallback). The UI only knows the interface. |
 | `script.js` | UI wiring for the five tabs, map layers and settings |
 | `firestore.rules` | Server-side security: report shape validation, only reporters/admins can delete, only admins post updates, nobody can make themselves admin. A profile can be saved only after the email is verified, and its UTA flag must match that email. |
 | `sw.js`, `manifest.webmanifest` | Installable PWA + offline app shell |
-| `tests.js`, `tests.html` | 91 automated tests |
+| `tests.js`, `tests.html` | 106 automated tests |
 
 ## Run and test
 
 No build step. Serve the folder with any static server, e.g. `python3 -m http.server`, then open `http://localhost:8000`.
 
 ```
-node tests.js        # 91 / 91 tests passed
+node tests.js        # 106 / 106 tests passed
 ```
 
 ## Shared backend setup (Firebase)
@@ -80,13 +84,13 @@ node tests.js        # 91 / 91 tests passed
 1. Create a Firebase project, enable Firestore and Authentication (Anonymous + Email/Password).
 2. Put the web app config in `firebase-config.js`.
 3. Paste `firestore.rules` into Firestore → Rules → Publish. Do this again after the accounts change: non-UTA users can sign in before the new rules are published, but saving a name fails until they are.
-4. To add an admin: create their Email/Password user in Authentication, copy the UID, and create a Firestore document `admins/<UID>`.
+4. To add a campus moderator: create their Email/Password user in Authentication, copy the UID, and create a Firestore document `admins/<UID>` with a `name` field (first name; it is shown publicly in the app's moderator count).
 
 The map opens with rail crossings, closures, and your dot. Parking, safety, shuttles, weather alerts, road work, and study stay off until those chips are tapped. Home leads with the commute brief; weather, city road work, and campus updates sit under See more.
 
 ## Sources
 
-City of Arlington open GIS data (right-of-way permits, railroads, Arlington PD crime and active calls; UTA Police incidents are not included) · UTA PATS — MavMover routes and parking lot addresses · OpenStreetMap contributors (map tiles, crossing and building positions) · National Weather Service API · Open-Meteo · TripShot (linked, not copied) · Leaflet.
+City of Arlington open GIS data (right-of-way permits, railroads, Arlington PD crime and active calls; UTA Police incidents are not included) · UTA PATS — MavMover routes and parking lot addresses · OpenStreetMap contributors (map tiles, crossing and building positions) · National Weather Service API · Open-Meteo · TripShot rider feed (via relay) · UTA Libraries (LibCal hours, Central Library occupancy counter) · UTA Parking Finder (Modii, linked) · Leaflet · QR code generated with python-qrcode.
 
 ## Use of generative AI
 

@@ -68,8 +68,10 @@ service cloud.firestore {
         && request.resource.data.at is int;
       allow delete: if request.auth != null && request.auth.uid == uid;
     }
+    // Moderator list is public (it only holds a first name) so the app can
+    // show who moderates. Still nobody can add themselves: writes are off.
     match /admins/{uid} {
-      allow read: if request.auth != null && request.auth.uid == uid;
+      allow read: if true;
       allow write: if false;
     }
   }

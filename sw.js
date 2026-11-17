@@ -3,13 +3,13 @@
  * shell open offline. External services and map tiles still need a network;
  * the app separately saves a snapshot of recent campus data on the device.
  */
-const CACHE = "mavpulse-v29";
+const CACHE = "mavpulse-v30";
 const SHELL = [
-  "./", "./index.html", "./style.css", "./script.js", "./logic.js", "./data.js", "./store.js", "./citydata.js", "./parking-areas.js", "./detours.js",
+  "./", "./index.html", "./style.css", "./script.js", "./logic.js", "./data.js", "./store.js", "./citydata.js", "./libraries.js", "./parking-areas.js", "./detours.js",
   "./firebase-config.js", "./manifest.webmanifest", "./vendor/leaflet/leaflet.js", "./vendor/leaflet/leaflet.css",
   "./vendor/leaflet/images/layers.png", "./vendor/leaflet/images/layers-2x.png",
   "./vendor/leaflet/images/marker-icon.png", "./vendor/leaflet/images/marker-icon-2x.png", "./vendor/leaflet/images/marker-shadow.png",
-  "./icons/favicon-64.png", "./icons/apple-touch-icon.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png"
+  "./icons/favicon-64.png", "./icons/apple-touch-icon.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png", "./icons/invite-qr.svg"
 ];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));

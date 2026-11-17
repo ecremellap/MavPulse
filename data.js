@@ -119,13 +119,18 @@
         tripshot: "https://uta.tripshot.com",
         tripshotRegion: "CA558DDC-D7F2-4B48-9CAC-DEEA1134F820",
         mavmover: "https://www.uta.edu/pats/transportation/mav-mover-shuttles.php",
-        parkingFinder: "https://go.uta.edu/park",
+        // go.uta.edu/park (the old shortlink) now redirects to a UTA site search.
+        parkingFinder: "https://uta.modii.co/v2/finder",
         teamEmail: "mailto:krm3798@mavs.uta.edu?subject=MavPulse%20admin%20volunteer",
         mavalertSignup: "https://www.uta.edu/mavalert",
         utaEmergency: "https://www.uta.edu/emergency",
         utaEmergencyLine: "tel:+18662584913",
         utaPoliceNonEmergency: "tel:+18172723381",
-        cityCrimeSearch: "https://crimesearch.arlingtontx.gov/"
+        cityCrimeSearch: "https://crimesearch.arlingtontx.gov/",
+        cityStreetClosures: "https://www.arlingtontx.gov/City-Services/Transportation-Streets-Traffic/Streets-and-Traffic/Street-Closures",
+        cityGisLayer: "https://gis2.arlingtontx.gov/agsext2/rest/services/OpenData/OD_Transportation/MapServer/9",
+        libraryHoursPage: "https://libraries.uta.edu/hours-locations",
+        appUrl: "https://ecremellap.github.io/MavPulse/"
     };
 
     const DATA = { CAMPUS_CENTER, CROSSINGS, PARKING, PARKING_ZONES, STUDY_SPOTS, PLACES, CLOSURE_KINDS, ROUTES, LINKS };

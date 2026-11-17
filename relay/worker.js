@@ -8,6 +8,10 @@
  *   - It refuses every other path.
  *   - It only answers MavPulse's own site.
  *   - It caches each answer for 10 seconds, so many users = few requests.
+ * Since Iteration 4 it also serves /library/occupancy: UTA Libraries' public
+ * Central Library headcount (libraries.uta.edu/occupancy), which has the same
+ * no-CORS limit. Cached for 60 seconds, so UTA's server sees at most one
+ * request a minute no matter how many people use MavPulse.
  * Deploy: Cloudflare dashboard -> Workers & Pages -> Create -> "Hello World"
  * worker -> Edit code -> paste this file -> Deploy. Put the worker URL in
  * firebase-config.js as MAVPULSE_SHUTTLE_RELAY.
@@ -25,6 +29,9 @@ export default {
             "Vary": "Origin"
         };
         if (request.method === "OPTIONS") return new Response(null, { headers: cors });
+        if (request.method === "GET" && url.pathname === "/library/occupancy") {
+            return libraryOccupancy(ctx, cors);
+        }
         if (request.method !== "GET" || !ALLOWED_PATHS.some(re => re.test(url.pathname))) {
             return new Response("Not allowed", { status: 403, headers: cors });
         }
@@ -43,3 +50,31 @@ export default {
         return out;
     }
 };
+
+// Central Library live headcount. UTA's page adds gauge.php (door counter)
+// and bump_read.php (staff correction, usually empty) and shows the sum.
+async function libraryOccupancy(ctx, cors) {
+    const cache = caches.default;
+    const key = new Request("https://mavpulse-relay.cache/library/occupancy");
+    let res = await cache.match(key);
+    if (!res) {
+        const get = path => fetch("https://libraries.uta.edu/occupancy/" + path, {
+            headers: { "User-Agent": "MavPulse relay (UTA CSE 3311 student project)" }
+        }).then(r => (r.ok ? r.text() : Promise.reject(new Error("HTTP " + r.status))));
+        let body, status = 200;
+        try {
+            const [gauge, bump] = await Promise.all([get("gauge.php"), get("bump_read.php").catch(() => "0")]);
+            const count = Number(String(gauge).trim()) + (Number(String(bump).trim()) || 0);
+            if (!Number.isFinite(count)) throw new Error("Unexpected answer");
+            body = JSON.stringify({ count, at: Date.now(), source: "https://libraries.uta.edu/occupancy/" });
+        } catch (e) {
+            status = 502;
+            body = JSON.stringify({ error: "Library counter unavailable" });
+        }
+        res = new Response(body, { status, headers: { "Content-Type": "application/json", "Cache-Control": "max-age=60" } });
+        if (status === 200) ctx.waitUntil(cache.put(key, res.clone()));
+    }
+    const out = new Response(res.body, res);
+    Object.entries(cors).forEach(([k, v]) => out.headers.set(k, v));
+    return out;
+}

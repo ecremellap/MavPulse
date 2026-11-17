@@ -35,20 +35,33 @@
         });
     }
 
-    async function query(path, params) {
+    // Every query is recorded (exact URL, time, row count) so the in-app
+    // "Where this data comes from" screen can show and open it.
+    const lastQuery = {};
+    async function query(path, params, key) {
         const p = new URLSearchParams({
             where: "1=1", geometry: JSON.stringify(AREA), geometryType: "esriGeometryEnvelope", inSR: "4326",
             spatialRel: "esriSpatialRelIntersects", outFields: "*", outSR: "4326", returnGeometry: "true", f: "json",
             ...params
         });
-        const data = await jsonp(`${BASE}${path}/query?${p}`);
-        if (data.error) throw new Error(data.error.message || "City GIS error");
-        return data.features || [];
+        const url = `${BASE}${path}/query?${p}`;
+        try {
+            const data = await jsonp(url);
+            if (data.error) throw new Error(data.error.message || "City GIS error");
+            const rows = data.features || [];
+            if (key) lastQuery[key] = { url, at: Date.now(), rows: rows.length, ok: true };
+            return rows;
+        } catch (e) {
+            if (key) lastQuery[key] = { url, at: Date.now(), rows: 0, ok: false };
+            throw e;
+        }
     }
 
     function sqlDate(ms) { return new Date(ms).toISOString().slice(0, 10); }
 
     const CityData = {
+        lastQuery,
+        AREA,
         roadWork() {
             return query("OpenData/OD_Transportation/MapServer/9", {
                 // Keep the server-side filter simple (compound filters fail over
@@ -56,22 +69,22 @@
                 where: `BarricadeRemove >= DATE '${sqlDate(Date.now())}'`,
                 outFields: "Permit,Status,Sub,ScopeOfWork,ProjectEnd,BarricadeInstall,BarricadeRemove,Segment",
                 resultRecordCount: "1000"
-            });
+            }, "roadwork");
         },
         railroads() {
-            return query("OpenData/OD_Transportation/MapServer/0", { outFields: "OBJECTID", resultRecordCount: "200" });
+            return query("OpenData/OD_Transportation/MapServer/0", { outFields: "OBJECTID", resultRecordCount: "200" }, "rail");
         },
         policeCalls() {
             return query("Police/PoliceExternal/MapServer/0", {
                 outFields: "CallTypeDescription,CallDate,Location,Status,Priority", resultRecordCount: "500"
-            });
+            }, "policeCalls");
         },
         crime(days) {
             const since = Date.now() - days * 24 * 3600 * 1000;
             return query("Police/PoliceExternal/MapServer/1", {
                 where: `DateOfOccurrence >= DATE '${sqlDate(since)}'`,
                 outFields: "Description,DateOfOccurrence,Juvenile", resultRecordCount: "2000"
-            });
+            }, "crime");
         }
     };
     root.MP_CITY = CityData;
