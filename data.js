@@ -54,11 +54,26 @@
     const STUDY_SPOTS = [
         { id: "central-library", name: "UTA Central Library", lat: 32.72970, lng: -97.11295 },
         { id: "science-engineering-library", name: "Science & Engineering Library", lat: 32.73227, lng: -97.11366 },
+        // West Campus Library is on the first floor of the CAPPA building (OSM "CAPPA Building").
+        { id: "west-campus-library", name: "West Campus Library (CAPPA)", lat: 32.73118, lng: -97.11614 },
         { id: "seir", name: "SEIR Building", lat: 32.72808, lng: -97.11385 },
         { id: "nedderman-hall", name: "Nedderman Hall", lat: 32.73226, lng: -97.11392 },
         { id: "university-center", name: "E.H. Hereford University Center", lat: 32.73166, lng: -97.11036 },
         { id: "life-science", name: "Life Science Building", lat: 32.72879, lng: -97.11288 }
     ];
+
+    // Posted building hours that have no live feed. Shown as "usual hours"
+    // with their source, never tagged official, because they don't track
+    // holidays or breaks. Minutes after midnight; 1440 = midnight closing.
+    // Source: UTA Student Centers Policies & Procedures 2026 (long semester).
+    const USUAL_HOURS = {
+        "university-center": {
+            source: "UTA Student Centers policy (2026)",
+            url: "https://cdn.prod.web.uta.edu/-/media/project/website/campus-ops/student-centers/documents/2026student-centers-policies--procedures--toc-1--updated.pdf",
+            summary: "Mon–Sat 7am–12am, Sun 11am–12am",
+            days: { 0: [[660, 1440]], 1: [[420, 1440]], 2: [[420, 1440]], 3: [[420, 1440]], 4: [[420, 1440]], 5: [[420, 1440]], 6: [[420, 1440]] }
+        }
+    };
 
     // Places offered in the closure picker so nobody has to type a street
     // name. Intersections near campus commuters ask about most.
@@ -133,7 +148,7 @@
         appUrl: "https://ecremellap.github.io/MavPulse/"
     };
 
-    const DATA = { CAMPUS_CENTER, CROSSINGS, PARKING, PARKING_ZONES, STUDY_SPOTS, PLACES, CLOSURE_KINDS, ROUTES, LINKS };
+    const DATA = { CAMPUS_CENTER, CROSSINGS, PARKING, PARKING_ZONES, STUDY_SPOTS, USUAL_HOURS, PLACES, CLOSURE_KINDS, ROUTES, LINKS };
     root.MP_DATA = DATA;
     if (typeof module !== "undefined" && module.exports) module.exports = DATA;
 })(typeof window !== "undefined" ? window : globalThis);

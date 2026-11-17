@@ -551,6 +551,22 @@
         eq(sem.length, 1); eq(sem[0].name, "Ana");
         assert(sem[0].accuracy && sem[0].accuracy.pct === null, "accuracy attached");
     });
+    test("Posted hours: UC is usually open until 12am on a Monday evening", () => {
+        const uc = D.USUAL_HOURS["university-center"];
+        const t = MP.usualHoursToday(uc, CT("2026-11-16T19:30:00"));
+        eq(t.openNow, true); eq(t.label, "Usually open until 12am");
+    });
+    test("Posted hours: UC opens at 11am on Sunday", () => {
+        const t = MP.usualHoursToday(D.USUAL_HOURS["university-center"], CT("2026-11-22T09:00:00"));
+        eq(t.openNow, false); eq(t.label, "Usually opens at 11am");
+    });
+    test("Posted hours: every entry names its source, so it is never shown as official", () => {
+        Object.values(D.USUAL_HOURS).forEach(e => { assert(e.source && /^https:/.test(e.url), "source + link"); });
+    });
+    test("Study spots: every spot has a real position on campus", () => {
+        D.STUDY_SPOTS.forEach(sp => assert(sp.lat > 32.72 && sp.lat < 32.74 && sp.lng > -97.125 && sp.lng < -97.105, sp.id));
+        assert(D.STUDY_SPOTS.some(sp => sp.id === "west-campus-library"), "West Campus Library listed");
+    });
     test("Invite text includes the link", () => {
         assert(MP.inviteText("https://x.test/").indexOf("https://x.test/") !== -1);
     });

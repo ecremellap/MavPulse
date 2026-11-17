@@ -1809,3 +1809,20 @@ a.src-query:hover { color: #fff; }
 .invite-qr { display: block; margin: 12px auto 6px; width: 220px; height: 220px; border-radius: 12px; border: 1px solid var(--line); background: #fff; padding: 6px; }
 .invite-url { text-align: center; font-weight: 800; color: var(--ink); font-size: 14px; margin-bottom: 12px; }
 .invite-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 10px; }
+
+/* ===== Iteration 4: source tags (official vs. posted vs. students) ===== */
+.src-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; border-radius: 6px; padding: 3px 7px; white-space: nowrap; text-decoration: none; vertical-align: middle; }
+.src-tag.official { color: var(--mav-blue); background: #e6f0fa; }
+.src-tag.official::before { content: "✓"; font-size: 11px; }
+.src-tag.usual { color: #6b5a10; background: #f7f1d9; }
+.src-tag.crowd { color: #5b4bb5; background: #eeebfb; }
+.lib-official, .lib-usual { justify-items: start; }
+.lib-usual { margin: 8px 0 4px; display: grid; gap: 6px; }
+.lib-hours.usual-open strong { color: var(--ink); }
+.lib-inside { font-size: 12px; color: var(--ink-2); }
+.study-status { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.study-status .src-tag { font-size: 9.5px; }
+.nws-alert-card .weather-meta, .roadwork-card .weather-meta { flex-wrap: wrap; gap: 6px; align-items: center; }
+#transit-updated .src-tag { margin-right: 4px; }
+.safety-card > .src-tag, #safety-card > .src-tag { margin-bottom: 6px; }
+#transit-updated { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }

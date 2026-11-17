@@ -27,7 +27,7 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 | Weather alerts + alert areas on the map | National Weather Service API | Live |
 | Current weather for campus | Open-Meteo | Live |
 | Parking: all 53 UTA parking areas highlighted on the map, garages labeled, student commuter zones, link to UTA Parking Finder (uta.modii.co) for live counts | OpenStreetMap outlines + UTA PATS 2026–27 permit guide | Reference |
-| Study spots: official library hours (open now / closes at) and a live Central Library headcount, plus busy / open student reports for every spot | UTA Libraries LibCal hours feed; UTA Libraries door counter via `relay/worker.js`; crowd reports | Live |
+| Study spots: official library hours for Central, Science & Engineering and West Campus libraries (plus the Day Family Research Lab and The Basement inside Central), a live Central Library headcount, University Center posted hours (labeled "Posted", not official), plus busy / open student reports for every spot | UTA Libraries LibCal hours feed; UTA Libraries door counter via `relay/worker.js`; crowd reports | Live |
 | MavMover live buses on the map and in the Shuttles tab: position, heading, riders on board, next stop and ETA | TripShot public rider feed via `relay/worker.js` (Cloudflare Worker) | Live when the relay is configured; otherwise schedule + TripShot link |
 | Official city road work (barricaded right-of-way permits) on the map and Home. This is a different dataset from the city's hand-edited Street Closure List PDF, which the app links | City of Arlington public GIS | Live, refreshed every 30 min |
 | Union Pacific track line on the map | City of Arlington public GIS | Live |
@@ -54,6 +54,8 @@ The next-iteration screens from the review deck are in the app now:
 
 "Shared" means reports sync to every user in real time through Firebase (Firestore). Without a Firebase config the app runs in on-device mode with the same features.
 
+Every screen tags where its data comes from: **✓ Official** only for feeds published live by the agency itself (UTA Libraries, UTA TripShot, City of Arlington, Arlington PD, National Weather Service); **Posted** for UTA documents and timetables that don't track holidays; **Students** for crowd reports.
+
 ## Code structure
 
 | File | Role |
@@ -69,14 +71,14 @@ The next-iteration screens from the review deck are in the app now:
 | `script.js` | UI wiring for the five tabs, map layers and settings |
 | `firestore.rules` | Server-side security: report shape validation, only reporters/admins can delete, only admins post updates, nobody can make themselves admin. A profile can be saved only after the email is verified, and its UTA flag must match that email. |
 | `sw.js`, `manifest.webmanifest` | Installable PWA + offline app shell |
-| `tests.js`, `tests.html` | 106 automated tests |
+| `tests.js`, `tests.html` | 110 automated tests |
 
 ## Run and test
 
 No build step. Serve the folder with any static server, e.g. `python3 -m http.server`, then open `http://localhost:8000`.
 
 ```
-node tests.js        # 106 / 106 tests passed
+node tests.js        # 110 / 110 tests passed
 ```
 
 ## Shared backend setup (Firebase)

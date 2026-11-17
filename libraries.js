@@ -14,7 +14,9 @@
     const HOURS_URL = "https://uta.libcal.com/widget/hours/grid?format=json&weeks=1&systemTime=0";
     const OCCUPANCY_PAGE = "https://libraries.uta.edu/occupancy/";
     // LibCal location ids for the study spots that are libraries.
-    const LIBCAL_IDS = { "central-library": 13818, "science-engineering-library": 17028 };
+    const LIBCAL_IDS = { "central-library": 13818, "science-engineering-library": 17028, "west-campus-library": 17029 };
+    // Study-friendly spaces inside a library, with their own LibCal hours.
+    const INSIDE = { "central-library": [[23739, "Day Family Research Lab"], [17020, "The Basement"]] };
     const lastQuery = {};
 
     let seq = 0;
@@ -32,7 +34,7 @@
     }
 
     const Libraries = {
-        LIBCAL_IDS, OCCUPANCY_PAGE, HOURS_URL, lastQuery,
+        LIBCAL_IDS, INSIDE, OCCUPANCY_PAGE, HOURS_URL, lastQuery,
         async hours() {
             try {
                 const grid = await jsonp(HOURS_URL);

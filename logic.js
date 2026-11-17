@@ -601,6 +601,24 @@
         const next = spans.find(h => minutes < h.from);
         return { found: true, status: "open", rendered: day.rendered, openNow: false, label: next ? `Opens at ${next.fromText}` : "Closed for the day" };
     }
+    // Posted (non-live) hours for today: { openNow, label }.
+    const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    function clockText(mins) {
+        if (mins >= 1440) return "12am";
+        const h = Math.floor(mins / 60), m = mins % 60;
+        return `${h % 12 || 12}${m ? ":" + String(m).padStart(2, "0") : ""}${h < 12 ? "am" : "pm"}`;
+    }
+    function usualHoursToday(entry, now) {
+        if (!entry || !entry.days) return null;
+        const { minutes, weekday } = chicagoParts(now);
+        const spans = entry.days[WEEKDAYS.indexOf(weekday)] || [];
+        if (!spans.length) return { openNow: false, label: "Usually closed today" };
+        const cur = spans.find(([a, b]) => minutes >= a && minutes < b);
+        if (cur) return { openNow: true, label: `Usually open until ${clockText(cur[1])}` };
+        const next = spans.find(([a]) => minutes < a);
+        return { openNow: false, label: next ? `Usually opens at ${clockText(next[0])}` : "Usually closed now" };
+    }
+
     // UTA Libraries' own gauge for Central Library: 0-1550 people, colored
     // green < 600, yellow < 1000, orange < 1400, red above. Same bands here.
     const CENTRAL_LIBRARY_GAUGE_MAX = 1550;
@@ -729,7 +747,7 @@
         TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute,
         LEADERBOARD_WINDOW_MS, isUtaEmail, isAccountEmail, profileIsUta, cleanDisplayName, weeklyLeaderboard,
         defaultCommute, cleanCommute, crossingPattern, typicalBlockMinutes, shouldAlertBefore, detourHandoff, PATTERN_MIN_REPORTS,
-        leaderboard, SEMESTER_WINDOW_MS, reporterAccuracy, ACCURACY_MIN_CHECKED, chicagoParts, parseClock, libraryToday, libraryCrowd, CENTRAL_LIBRARY_GAUGE_MAX, inviteText
+        leaderboard, SEMESTER_WINDOW_MS, reporterAccuracy, ACCURACY_MIN_CHECKED, chicagoParts, parseClock, libraryToday, libraryCrowd, CENTRAL_LIBRARY_GAUGE_MAX, inviteText, usualHoursToday
     };
     root.MP = LOGIC;
     // Back-compat names used by the Iteration 2 tests.
