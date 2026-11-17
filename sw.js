@@ -3,7 +3,7 @@
  * shell open offline. External services and map tiles still need a network;
  * the app separately saves a snapshot of recent campus data on the device.
  */
-const CACHE = "mavpulse-v30";
+const CACHE = "mavpulse-v31";
 const SHELL = [
   "./", "./index.html", "./style.css", "./script.js", "./logic.js", "./data.js", "./store.js", "./citydata.js", "./libraries.js", "./parking-areas.js", "./detours.js",
   "./firebase-config.js", "./manifest.webmanifest", "./vendor/leaflet/leaflet.js", "./vendor/leaflet/leaflet.css",

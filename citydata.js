@@ -57,7 +57,9 @@
         }
     }
 
-    function sqlDate(ms) { return new Date(ms).toISOString().slice(0, 10); }
+    // The City's dates are local (Arlington). Using the UTC date here made
+    // evening queries ask for "tomorrow" and drop permits ending today.
+    function sqlDate(ms) { return new Date(ms).toLocaleDateString("en-CA", { timeZone: "America/Chicago" }); }
 
     const CityData = {
         lastQuery,
