@@ -1359,8 +1359,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                 pendingName(name);
                 await store.utaSignUp(email, pass);
                 $("acct-msg").textContent = emailIsUta
-                    ? "Almost there: check your inbox. You'll be on the UTA board."
-                    : "Almost there: check your inbox. You'll be on the other board.";
+                    ? "Almost there: check your inbox AND your Junk folder for the link. You'll be on the UTA board."
+                    : "Almost there: check your inbox AND your Junk folder for the link. You'll be on the other board.";
+                toast("Link sent. Check your Junk folder too.", "ok");
             } else {
                 await store.utaSignIn(email, pass);
                 if (name) pendingName(name);
@@ -1385,7 +1386,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         renderAccount(); renderAll();
     });
     $("acct-resend").addEventListener("click", async () => {
-        try { await store.resendVerification(); $("acct-msg").textContent = "Sent again. Check Junk too."; }
+        try { await store.resendVerification(); $("acct-msg").textContent = "Sent again. Check your Junk / Spam folder too."; toast("Link sent again. Check Junk.", "ok"); }
         catch (err) { $("acct-msg").textContent = err.message; }
     });
     $("profile-form").addEventListener("submit", async e => {

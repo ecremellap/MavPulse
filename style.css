@@ -1826,3 +1826,7 @@ a.src-query:hover { color: #fff; }
 #transit-updated .src-tag { margin-right: 4px; }
 .safety-card > .src-tag, #safety-card > .src-tag { margin-bottom: 6px; }
 #transit-updated { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+
+/* ===== Verification email: point people at Junk ===== */
+.junk-note { margin: 8px 0 10px; padding: 10px 12px; border-radius: 10px; background: #fff4e5; border: 1px solid #f5c58a; color: #7a3d00; font-size: 13px; line-height: 1.45; word-break: break-word; }
+.junk-note b { color: #5c2d00; }

@@ -329,6 +329,7 @@
                         <input type="text" id="acct-name" placeholder="First name (shown on the board)" autocomplete="given-name" maxlength="20">
                         <input type="email" id="acct-email" placeholder="you@mavs.uta.edu" autocomplete="username" required>
                         <input type="password" id="acct-pass" placeholder="Password (6+ characters)" autocomplete="new-password" minlength="6" required>
+                        <p class="section-hint">We'll email you a link to confirm. It often lands in <b>Junk</b>.</p>
                         <div class="acct-btns">
                             <button class="small-btn" type="submit" data-act="signup">Create account</button>
                             <button class="text-btn" type="submit" data-act="signin">I already have one</button>
@@ -336,7 +337,8 @@
                     </form>
                 </div>
                 <div id="acct-verify" hidden>
-                    <p class="section-hint"><span class="kind-badge" id="acct-badge-verify">UTA</span> <b>Check your inbox.</b> We sent a link to <b id="acct-verify-email"></b>. Tap it, then come back here. You can keep reporting meanwhile; your points are saved. (Not there? Check Junk.)</p>
+                    <p class="section-hint"><span class="kind-badge" id="acct-badge-verify">UTA</span> <b>Check your inbox.</b> We sent a link to <b id="acct-verify-email"></b>. Tap it, then come back here. You can keep reporting meanwhile; your points are saved.</p>
+                    <div class="junk-note"><b>Not in your inbox? Check your Junk / Spam folder.</b> UTA Outlook usually puts it there. Look for <b>noreply@mavpulse-2d2fc.firebaseapp.com</b>, then mark it "Not junk".</div>
                     <div class="acct-btns">
                         <button class="small-btn" id="acct-check" type="button">I verified it</button>
                         <button class="text-btn" id="acct-resend" type="button">Resend the link</button>
