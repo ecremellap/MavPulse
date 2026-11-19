@@ -595,7 +595,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             await store.addReport(full);
             celebrate(tapped, MP.RULES.POINTS_PER_REPORT);
             toast(okMsg, "ok");
-            if (full.type === "crossing" || full.type === "closure") askPushCheck();
             return true;
         } catch (e) {
             console.error(e);
@@ -1463,7 +1462,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     //  NOTIFICATIONS (commuter / quiet / off)
     // ======================================================================
     const MODE_HELP = {
-        commuter: "Allow notifications. A confirmed train, a closure, or severe weather can still arrive after the app is fully closed. On iPhone or iPad, install MavPulse to the Home Screen first (iOS/iPadOS 16.4+).",
+        commuter: "Allow notifications and leave MavPulse running in the background for lock-screen alerts. On iPhone or iPad, install it to the Home Screen first (iOS/iPadOS 16.4+). Alerts stay until you return and repeat only if the route changes. Fully closed apps need a push server.",
         quiet: "Only Severe or Extreme NWS weather warnings, including on the lock screen when notifications are allowed and MavPulse is in the background.",
         off: "No notifications. You can still see everything in the app."
     };
@@ -1485,49 +1484,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             try { await Notification.requestPermission(); } catch (e) { /* older Safari */ }
         }
         renderNotifyMode();
-        ensurePushSubscription();
     }));
     document.addEventListener("pointerdown", () => {
         if (state.notifyMode === "off" || !("Notification" in window) || Notification.permission !== "default") return;
-        Notification.requestPermission().then(() => { renderNotifyMode(); ensurePushSubscription(); }).catch(() => {});
+        Notification.requestPermission().then(() => renderNotifyMode()).catch(() => {});
     }, { once: true });
-    function vapidKeyBytes(key) {
-        const pad = key.length % 4 === 0 ? "" : "=".repeat(4 - (key.length % 4));
-        const bin = atob(key.replace(/-/g, "+").replace(/_/g, "/") + pad);
-        const out = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-        return out;
-    }
-    async function ensurePushSubscription() {
-        if (!RELAY || !window.MAVPULSE_VAPID_PUBLIC || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
-        if (!("Notification" in window) || Notification.permission !== "granted") return;
-        try {
-            const reg = await navigator.serviceWorker.ready;
-            if (state.notifyMode === "off") {
-                const existing = await reg.pushManager.getSubscription();
-                if (existing) { await existing.unsubscribe(); fetch(RELAY + "/push/unsubscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: existing.endpoint }) }).catch(() => {}); }
-                savePref("mavpulse-push-endpoint", "");
-                return;
-            }
-            let sub = await reg.pushManager.getSubscription();
-            if (!sub) {
-                sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKeyBytes(window.MAVPULSE_VAPID_PUBLIC) });
-            }
-            const body = sub.toJSON();
-            const stamp = body.endpoint + "|" + state.notifyMode;
-            if (loadPref("mavpulse-push-endpoint", "") === stamp) return;
-            const res = await fetch(RELAY + "/push/subscribe", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ endpoint: body.endpoint, keys: body.keys, mode: state.notifyMode === "quiet" ? "quiet" : "commuter" })
-            });
-            if (res.ok) savePref("mavpulse-push-endpoint", stamp);
-        } catch (e) { console.warn("Push subscription failed", e); }
-    }
-    function askPushCheck() {
-        if (!RELAY) return;
-        fetch(RELAY + "/push/check", { method: "POST" }).catch(() => {});
-    }
     async function maybeNotify(event) {
         if (state.notified.has(event.key)) return;
         if (!MP.shouldNotify(state.notifyMode, event)) return;
@@ -1963,7 +1924,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             location.reload();
         });
         navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
-            ensurePushSubscription();
             // Installed apps can stay open for days: check for updates on return.
             document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
         }).catch(e => console.warn("SW registration failed", e));

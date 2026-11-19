@@ -50,7 +50,7 @@ The next-iteration screens from the review deck are in the app now:
 - **Patterns** on each crossing stay hidden until 20 blocked reports in the last 7 days, then show the busiest hour. Fewer than that says how many are still needed.
 - **Open in Maps** hands the underpass or bridge route to Apple Maps, Google Maps, or Waze. The distance is the mapped route at about 20 mph, not live traffic.
 - **Offline** works after the app has loaded online once: it opens the cached app shell and restores the last saved reports, campus updates, weather, NWS alerts, and nearby city road work. Reports made offline are kept on this device and retried when the connection returns. Live APIs, GPS, shuttle positions, and OpenStreetMap tiles still require a connection; the map can show saved reports and local reference layers without its online basemap.
-- **Notifications blocked** explains how to allow them. Confirmed crossings and eligible weather alerts can reach the lock screen on supported Android and installed iPhone/iPad PWAs while MavPulse runs in the background. A fully closed app can still receive a confirmed train, a closure, or severe weather through the relay (`/push/subscribe`, checked every 5 minutes and right after a report). That needs the worker's `PUSH_KV` binding, the VAPID secrets, and a 5-minute cron. The public key is `MAVPULSE_VAPID_PUBLIC`. The private key is a Cloudflare secret and is not in this repo. iPhone/iPad requires iOS/iPadOS 16.4+ and Home Screen installation.
+- **Notifications blocked** explains how to allow them. Confirmed crossings and eligible weather alerts can reach the lock screen on supported Android and installed iPhone/iPad PWAs while MavPulse runs in the background. iPhone/iPad requires iOS/iPadOS 16.4+ and Home Screen installation. A fully closed app needs a push server, which this host does not run.
 
 "Shared" means reports sync to every user in real time through Firebase (Firestore). Without a Firebase config the app runs in on-device mode with the same features.
 
@@ -71,14 +71,14 @@ Every screen tags where its data comes from: **✓ Official** only for feeds pub
 | `script.js` | UI wiring for the five tabs, map layers and settings |
 | `firestore.rules` | Server-side security: report shape validation, only reporters/admins can delete, only admins post updates, nobody can make themselves admin. A profile can be saved only after the email is verified, and its UTA flag must match that email. |
 | `sw.js`, `manifest.webmanifest` | Installable PWA + offline app shell |
-| `tests.js`, `tests.html` | 115 automated tests |
+| `tests.js`, `tests.html` | 114 automated tests |
 
 ## Run and test
 
 No build step. Serve the folder with any static server, e.g. `python3 -m http.server`, then open `http://localhost:8000`.
 
 ```
-node tests.js        # 115 / 115 tests passed
+node tests.js        # 114 / 114 tests passed
 ```
 
 ## Shared backend setup (Firebase)
