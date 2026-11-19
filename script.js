@@ -739,7 +739,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         renderStudy();
     }));
     // Official library data: hours for every library, live headcount for Central.
-    state.lib = { hours: null, occ: null, occErr: false, hoursErr: false };
+    state.lib = { hours: null, occ: null, occErr: false, hoursErr: false, samples: loadJSON("mavpulse-lib-today", []) };
+    function rememberLibraryCount(occ) {
+        if (!occ || typeof occ.count !== "number") return;
+        const at = Number.isFinite(occ.at) ? occ.at : now();
+        const date = MP.chicagoParts(at).date;
+        let list = (state.lib.samples || []).filter(s => s && Number.isFinite(s.at) && MP.chicagoParts(s.at).date === date);
+        const last = list[list.length - 1];
+        if (last && Math.abs(at - last.at) < 90 * 1000) list[list.length - 1] = { at, count: occ.count };
+        else list.push({ at, count: occ.count });
+        if (list.length > 200) list = list.slice(-200);
+        state.lib.samples = list;
+        try { localStorage.setItem("mavpulse-lib-today", JSON.stringify(list)); } catch (e) { /* ignore */ }
+    }
     let libBusy = false;
     async function loadLibraries() {
         if (libBusy || !window.MP_LIB) return;
@@ -750,7 +762,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         ]);
         if (h.status === "fulfilled") { if (h.value !== state.lib.hours) state.lib.hoursAt = now(); state.lib.hours = h.value; state.lib.hoursErr = false; }
         else { state.lib.hoursErr = true; console.warn("Library hours unavailable", h.reason); }
-        if (o.status === "fulfilled") { state.lib.occ = o.value; state.lib.occErr = false; }
+        if (o.status === "fulfilled") { state.lib.occ = o.value; state.lib.occErr = false; rememberLibraryCount(o.value); }
         else { state.lib.occErr = true; console.warn("Library headcount unavailable", o.reason); }
         libBusy = false;
         renderStudy();
@@ -787,6 +799,8 @@ document.addEventListener("DOMContentLoaded", async () => {
                 const a = el("a", "text-btn", "See the live headcount on UTA Libraries"); a.href = window.MP_LIB.OCCUPANCY_PAGE; a.target = "_blank"; a.rel = "noopener";
                 box.appendChild(a);
             }
+            const chart = libraryDayChart(today && today.spans);
+            if (chart) box.appendChild(chart);
         }
         const inside = (window.MP_LIB.INSIDE || {})[s.id];
         if (inside && state.lib.hours) {
@@ -797,6 +811,41 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (parts.length) box.appendChild(el("div", "lib-inside", `Also inside: ${parts.join(" · ")}`));
         }
         return box;
+    }
+    function hourTick(h) {
+        const hr = ((h % 24) + 24) % 24;
+        return `${hr % 12 || 12}${hr < 12 ? "a" : "p"}`;
+    }
+    function libraryDayChart(spans) {
+        const day = MP.libraryDayBars(state.lib.samples, spans || [], now());
+        if (!day.hours.some(h => h.count != null)) return null;
+        const wrap = el("div", "lib-pop");
+        const peak = day.hours.find(h => h.peak);
+        const cur = day.hours.find(h => h.current && h.count != null);
+        const head = el("div", "lib-pop-head");
+        head.appendChild(el("span", "lib-pop-title", "Today"));
+        const bits = [];
+        if (cur) bits.push(`Now ${hourTick(cur.hour)} · ${cur.count.toLocaleString()}`);
+        if (peak) bits.push(`Busiest ${hourTick(peak.hour)} · ${peak.count.toLocaleString()}`);
+        head.appendChild(el("span", "lib-pop-summary", bits.join(" · ")));
+        wrap.appendChild(head);
+        const chart = el("div", "lib-pop-chart");
+        chart.setAttribute("role", "img");
+        chart.setAttribute("aria-label", bits.join(". ") || "Library busyness today");
+        const first = day.hours[0].hour, last = day.hours[day.hours.length - 1].hour;
+        day.hours.forEach(h => {
+            const col = el("div", "pop-col" + (h.current ? " is-now" : "") + (h.peak ? " is-peak" : "") + (h.count == null ? " is-empty" : ""));
+            const bar = el("span", "pop-bar");
+            bar.style.height = (h.count == null ? 0 : Math.max(10, h.pct)) + "%";
+            col.appendChild(bar);
+            const showTick = h.hour === first || h.hour === last || h.hour % 3 === 0;
+            col.appendChild(el("span", "pop-tick", showTick ? hourTick(h.hour) : ""));
+            col.title = h.count == null ? `${hourTick(h.hour)} · no count yet` : `${hourTick(h.hour)} · ${h.count.toLocaleString()} people`;
+            chart.appendChild(col);
+        });
+        wrap.appendChild(chart);
+        wrap.appendChild(el("div", "lib-src", "Today's door counts on this phone. Empty hours have not been checked yet. This is not a typical week."));
+        return wrap;
     }
     function usualBlock(s) {
         const entry = D.USUAL_HOURS && D.USUAL_HOURS[s.id];
@@ -1573,7 +1622,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             { title: "Union Pacific track line", provider: "City of Arlington GIS", how: "Loaded once.", log: city.rail },
             { group: "UTA (official)" },
             { title: "Central Library live headcount", provider: "UTA Libraries door counter, through the MavPulse relay",
-              how: "Relay caches 60 s, so UTA's server sees at most one request a minute.", log: lib.occupancy, page: window.MP_LIB && window.MP_LIB.OCCUPANCY_PAGE },
+              how: "Relay caches 60 s, so UTA's server sees at most one request a minute. Today's bar chart is those counts, saved on this phone, not a typical-week estimate.", log: lib.occupancy, page: window.MP_LIB && window.MP_LIB.OCCUPANCY_PAGE },
             { title: "Library hours", provider: "UTA Libraries (LibCal)", how: "Refreshed every 30 min. Central, Science & Engineering, West Campus, plus the Day Family Research Lab and The Basement inside Central.", log: lib.hours, page: D.LINKS.libraryHoursPage },
             { title: "University Center hours", provider: "UTA Student Centers policy (2026)", how: "Posted hours, built into the app. Not live, so they're labeled \"Posted\" and not official.", page: D.USUAL_HOURS["university-center"].url },
             { title: "MavMover live buses", provider: "UTA's TripShot rider feed, through the MavPulse relay. The route timetable is UTA PATS's posted schedule",

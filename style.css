@@ -1766,6 +1766,17 @@ body {
 .lib-bar { height: 8px; border-radius: 4px; background: #e6eaf0; overflow: hidden; margin: 8px 0 6px; }
 .lib-bar span { display: block; height: 100%; border-radius: 4px; background: var(--lvl); transition: width .6s var(--ease-out, ease); }
 .lib-src { font-size: 11px; color: var(--ink-2); }
+.lib-pop { width: 100%; margin-top: 4px; }
+.lib-pop-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.lib-pop-title { font-size: 12px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); }
+.lib-pop-summary { font-size: 12px; font-weight: 700; color: var(--ink); text-align: right; }
+.lib-pop-chart { display: flex; align-items: flex-end; gap: 3px; height: 68px; margin-bottom: 14px; }
+.pop-col { position: relative; flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+.pop-bar { display: block; width: 100%; height: 0; border-radius: 3px 3px 0 0; background: #c5d4e6; }
+.pop-col.is-now .pop-bar { background: var(--mav-blue); }
+.pop-col.is-peak:not(.is-now) .pop-bar { background: var(--blaze); }
+.pop-col.is-empty .pop-bar { height: 3px !important; background: #e6ebf2; }
+.pop-tick { position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%); font-size: 9px; font-weight: 700; color: var(--ink-2); line-height: 12px; white-space: nowrap; }
 
 /* ===== Iteration 4: data sources sheet ===== */
 .sources-btn { display: inline-flex; align-items: center; gap: 6px; margin: 18px 0 6px; background: none; border: 1px dashed var(--line); color: var(--mav-blue); font-weight: 700; font-size: 13px; border-radius: 10px; padding: 10px 12px; cursor: pointer; width: 100%; justify-content: center; }

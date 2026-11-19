@@ -530,6 +530,28 @@
         eq(MP.libraryCrowd("n/a"), null);
         eq(MP.libraryCrowd(-5), null);
     });
+    test("Library day bars mark now and the busiest hour, and ignore yesterday", () => {
+        const now = CT("2026-11-16T14:10:00");
+        const samples = [
+            { at: CT("2026-11-16T10:05:00"), count: 200 },
+            { at: CT("2026-11-16T10:40:00"), count: 350 },
+            { at: CT("2026-11-16T14:05:00"), count: 500 },
+            { at: CT("2026-11-15T14:00:00"), count: 900 }
+        ];
+        const day = MP.libraryDayBars(samples, [{ from: 390, to: 1440 }], now);
+        const ten = day.hours.find(h => h.hour === 10);
+        const two = day.hours.find(h => h.hour === 14);
+        eq(day.hours[0].hour, 6);
+        eq(day.hours[day.hours.length - 1].hour, 23);
+        eq(ten.count, 350);
+        eq(ten.pct, 70);
+        eq(ten.peak, false);
+        eq(two.current, true);
+        eq(two.peak, true);
+        eq(two.count, 500);
+        eq(day.hours.find(h => h.hour === 6).count, null);
+        eq(day.peakHour, 14);
+    });
     const crx = (who, status, m, id) => ({ type: "crossing", targetId: id || "cooper", status, reporterId: who, at: min(m) });
     test("Accuracy: backed-up and disputed reports are counted separately", () => {
         const reports = [

@@ -604,15 +604,15 @@
         if (!day) return { found: false };
         const t = day.times || {};
         if (t.status !== "open" && t.status !== "24hours") {
-            return { found: true, status: "closed", rendered: day.rendered || "Closed", openNow: false, label: "Closed today" };
+            return { found: true, status: "closed", rendered: day.rendered || "Closed", openNow: false, label: "Closed today", spans: [] };
         }
-        if (t.status === "24hours") return { found: true, status: "open", rendered: "Open 24 hours", openNow: true, label: "Open 24 hours" };
+        if (t.status === "24hours") return { found: true, status: "open", rendered: "Open 24 hours", openNow: true, label: "Open 24 hours", spans: [{ from: 0, to: 1440 }] };
         const spans = (t.hours || []).map(h => ({ from: parseClock(h.from), to: parseClock(h.to, true), toText: h.to, fromText: h.from }))
             .filter(h => h.from !== null && h.to !== null);
         const cur = spans.find(h => minutes >= h.from && minutes < h.to);
-        if (cur) return { found: true, status: "open", rendered: day.rendered, openNow: true, label: `Open until ${cur.toText}` };
+        if (cur) return { found: true, status: "open", rendered: day.rendered, openNow: true, label: `Open until ${cur.toText}`, spans };
         const next = spans.find(h => minutes < h.from);
-        return { found: true, status: "open", rendered: day.rendered, openNow: false, label: next ? `Opens at ${next.fromText}` : "Closed for the day" };
+        return { found: true, status: "open", rendered: day.rendered, openNow: false, label: next ? `Opens at ${next.fromText}` : "Closed for the day", spans };
     }
     // Posted (non-live) hours for today: { openNow, label }.
     const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -641,6 +641,42 @@
         const level = n < 600 ? "low" : n < 1000 ? "medium" : n < 1400 ? "high" : "full";
         const label = { low: "Plenty of room", medium: "Filling up", high: "Busy", full: "Very busy" }[level];
         return { count: Math.round(n), level, label, pct: Math.min(100, Math.round((n / CENTRAL_LIBRARY_GAUGE_MAX) * 100)) };
+    }
+
+    // Today's Central Library door counts as one bar per open hour.
+    // UTA publishes the live count only, so this is today on this phone,
+    // not Google's typical week. The tallest bar is the busiest hour so far.
+    function libraryDayBars(samples, spans, now) {
+        const stamp = chicagoParts(now || Date.now());
+        const currentHour = Math.floor(stamp.minutes / 60);
+        const byHour = {};
+        (samples || []).forEach(s => {
+            const n = Number(s && s.count);
+            if (!s || !Number.isFinite(Number(s.at)) || !Number.isFinite(n) || n < 0) return;
+            if (chicagoParts(s.at).date !== stamp.date) return;
+            const h = Math.floor(chicagoParts(s.at).minutes / 60);
+            if (byHour[h] == null || n > byHour[h]) byHour[h] = Math.round(n);
+        });
+        let from = 7, to = 24;
+        const open = (spans || []).filter(s => s && Number.isFinite(s.from) && Number.isFinite(s.to));
+        if (open.length) {
+            let fromMin = Math.min.apply(null, open.map(s => s.from));
+            let toMin = Math.max.apply(null, open.map(s => s.to));
+            if (toMin <= fromMin) toMin += 1440;
+            from = Math.max(0, Math.floor(fromMin / 60));
+            to = Math.min(24, Math.ceil(toMin / 60));
+            if (to <= from) to = Math.min(24, from + 1);
+        }
+        const hours = [];
+        for (let h = from; h < to; h++) hours.push({ hour: h, count: byHour[h] == null ? null : byHour[h], current: h === currentHour });
+        const peakCount = hours.reduce((m, h) => h.count == null ? m : Math.max(m, h.count), 0);
+        let peakAt = -1;
+        hours.forEach(h => { if (h.count != null && h.count === peakCount && peakCount > 0) peakAt = h.hour; });
+        hours.forEach(h => {
+            h.peak = peakAt === h.hour;
+            h.pct = h.count == null || !peakCount ? 0 : Math.round((h.count / peakCount) * 100);
+        });
+        return { hours, peakCount, peakHour: peakAt < 0 ? null : peakAt };
     }
 
     // Short invite text for sharing the app.
@@ -760,7 +796,7 @@
         TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute,
         LEADERBOARD_WINDOW_MS, isUtaEmail, isAccountEmail, profileIsUta, cleanDisplayName, weeklyLeaderboard,
         defaultCommute, cleanCommute, crossingPattern, typicalBlockMinutes, shouldAlertBefore, detourHandoff, PATTERN_MIN_REPORTS,
-        leaderboard, SEMESTER_WINDOW_MS, reporterAccuracy, ACCURACY_MIN_CHECKED, chicagoParts, parseClock, libraryToday, libraryCrowd, CENTRAL_LIBRARY_GAUGE_MAX, inviteText, usualHoursToday
+        leaderboard, SEMESTER_WINDOW_MS, reporterAccuracy, ACCURACY_MIN_CHECKED, chicagoParts, parseClock, libraryToday, libraryCrowd, libraryDayBars, CENTRAL_LIBRARY_GAUGE_MAX, inviteText, usualHoursToday
     };
     root.MP = LOGIC;
     // Back-compat names used by the Iteration 2 tests.
