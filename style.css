@@ -1188,6 +1188,14 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 
 /* Tab bar: light, blue active, orange Report */
 .tab-bar { background: #fff; border-top: 1px solid var(--line); min-height: 62px; padding-top: 4px; }
+.here-card { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; background: #fff; border-top: 1px solid var(--line); z-index: 30; }
+.here-card[hidden] { display: none; }
+.here-title { display: block; font-size: 15px; font-weight: 800; color: var(--ink); }
+.here-sub { display: block; font-size: 12.5px; line-height: 1.35; color: var(--ink-2); margin-top: 2px; }
+.here-actions { display: flex; gap: 8px; }
+.here-btn { flex: 1; border: 0; border-radius: 10px; min-height: 40px; padding: 8px; font-weight: 800; font-size: 13px; background: var(--blaze); color: #fff; cursor: pointer; }
+.here-btn.ok { background: var(--signal-green); }
+.here-wait { font-size: 12.5px; color: var(--ink-2); }
 .tab-item { color: #6b7a8f; gap: 2px; }
 .tab-item .tab-icon .i { width: 22px; height: 22px; }
 .tab-label { font-size: 11px; font-weight: 700; }

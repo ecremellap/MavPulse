@@ -414,6 +414,18 @@
             .filter(h => h.meters <= radiusM).sort((a, b) => a.meters - b.meters);
     }
 
+    // Close enough to be standing at the crossing, not just on campus.
+    // The 1 km hazard warning stays separate.
+    const AT_CROSSING_M = 180;
+    function crossingAsk(pos, crossings, radiusM) {
+        if (!pos) return null;
+        const limit = radiusM == null ? AT_CROSSING_M : radiusM;
+        const near = (crossings || []).map(c => ({ ...c, meters: Math.round(distanceMeters(pos, c)) }))
+            .filter(c => Number.isFinite(c.meters) && c.meters <= limit)
+            .sort((a, b) => a.meters - b.meters);
+        return near[0] || null;
+    }
+
 
     // =================================================================
     //  Long trains: one train blocks several crossings
@@ -792,7 +804,7 @@
         RULES, shouldConfirmCrossingAlert, crossingState, createClosureReport, activeReports,
         activeClosures, latestStatus, canReport, underRateLimit, studyStatus, routeStatus, filterCampusAlerts, shouldNotify, contributorStats,
         buildBrief, minutesAgo, distanceMeters, nearest,
-        activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards, commuterBar, shouldPostLockNote,
+        activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards, crossingAsk, AT_CROSSING_M, commuterBar, shouldPostLockNote,
         TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute,
         LEADERBOARD_WINDOW_MS, isUtaEmail, isAccountEmail, profileIsUta, cleanDisplayName, weeklyLeaderboard,
         defaultCommute, cleanCommute, crossingPattern, typicalBlockMinutes, shouldAlertBefore, detourHandoff, PATTERN_MIN_REPORTS,

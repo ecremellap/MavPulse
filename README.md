@@ -33,7 +33,7 @@ It opens full screen like a native app and keeps its app shell offline. We chose
 | Union Pacific track line on the map | City of Arlington public GIS | Live |
 | Safety layer: reported offenses (last 30 days) and active police calls near campus | Arlington Police Department public data | Live (crime nightly, calls every 15 min) |
 | UTA MavAlert relays (verified admins) + MavAlert sign-up and emergency info links | Admin relay; UTA has no public MavAlert feed | Live, shared |
-| Live GPS: blue dot, follow mode, warning when within 1 km of a blocked crossing, closure or road work | Browser geolocation | Live |
+| Live GPS: blue dot, follow mode, warning when within 1 km of a blocked crossing, closure or road work. Within 180 m of a crossing, one tap reports a train, confirms it, or marks it clear | Browser geolocation | Live |
 | Morning brief | All of the above | Live |
 | Notifications: Commuter / Quiet / Off | Browser notifications, including lock-screen alerts on supported installed mobile/tablet PWAs while the app runs in the background | Live |
 | Contributor points, levels and **report accuracy** (backed up vs. contradicted by other commuters; shown after 3 checked reports, "Trusted" at 80%+) | Crowd reports | Live |
@@ -71,14 +71,14 @@ Every screen tags where its data comes from: **✓ Official** only for feeds pub
 | `script.js` | UI wiring for the five tabs, map layers and settings |
 | `firestore.rules` | Server-side security: report shape validation, only reporters/admins can delete, only admins post updates, nobody can make themselves admin. A profile can be saved only after the email is verified, and its UTA flag must match that email. |
 | `sw.js`, `manifest.webmanifest` | Installable PWA + offline app shell |
-| `tests.js`, `tests.html` | 113 automated tests |
+| `tests.js`, `tests.html` | 114 automated tests |
 
 ## Run and test
 
 No build step. Serve the folder with any static server, e.g. `python3 -m http.server`, then open `http://localhost:8000`.
 
 ```
-node tests.js        # 113 / 113 tests passed
+node tests.js        # 114 / 114 tests passed
 ```
 
 ## Shared backend setup (Firebase)

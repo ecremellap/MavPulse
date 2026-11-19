@@ -2061,24 +2061,66 @@ document.addEventListener("DOMContentLoaded", async () => {
             if (followMe) map.panTo([pos.lat, pos.lng]);
         }
         updateHazardBanner(pos);
+        renderHereCard();
     }
-    $("locate-btn").addEventListener("click", () => {
-        const btn = $("locate-btn");
-        if (watchId !== null) {
-            navigator.geolocation.clearWatch(watchId); watchId = null;
-            layers.me.clearLayers(); meMarker = meCircle = null; state.myPos = null;
-            btn.setAttribute("aria-pressed", "false"); btn.innerHTML = svg("locate") + "<span>Locate me</span>"; $("hazard-banner").hidden = true;
+    function hereBtn(label, kind, fn) {
+        const b = el("button", "here-btn" + (kind ? " " + kind : ""), label);
+        b.type = "button";
+        b.addEventListener("click", fn);
+        return b;
+    }
+    function renderHereCard() {
+        const card = $("here-card");
+        if (!card) return;
+        if (!state.myPos) { card.hidden = true; return; }
+        const hit = MP.crossingAsk(state.myPos, crossingStates(), MP.AT_CROSSING_M);
+        if (!hit) { card.hidden = true; return; }
+        card.hidden = false;
+        $("here-title").textContent = `You're at ${hit.name}`;
+        const age = hit.lastAt ? MP.minutesAgo(hit.lastAt, now()) : "";
+        const sub = hit.state === "clear" ? "No train reported right now."
+            : hit.state === "reported" ? "One report so far. A second person confirms it."
+            : hit.state === "likely" ? `Likely blocked, same train as ${hit.cause || "the next crossing"}.`
+            : `Confirmed blocked${age ? " · " + age : ""}.`;
+        $("here-sub").textContent = `${hit.meters} m away · ${sub}`;
+        const actions = $("here-actions");
+        actions.innerHTML = "";
+        if (!MP.canReport(allReports(), state.uid, "crossing", hit.id, now())) {
+            actions.appendChild(el("span", "here-wait", "You just reported this. You can update it in 2 minutes."));
             return;
         }
-        if (!navigator.geolocation) { toast("Location isn't available in this browser."); return; }
+        if (hit.state === "clear") actions.appendChild(hereBtn("Train here", "", () => reportCrossing(hit.id, "blocked")));
+        else {
+            actions.appendChild(hereBtn("Still blocked", "", () => reportCrossing(hit.id, "blocked")));
+            actions.appendChild(hereBtn("It's clear", "ok", () => reportCrossing(hit.id, "clear")));
+        }
+    }
+    function stopFollow() {
+        if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+        layers.me.clearLayers(); meMarker = meCircle = null; state.myPos = null;
+        const btn = $("locate-btn");
+        btn.setAttribute("aria-pressed", "false"); btn.innerHTML = svg("locate") + "<span>Locate me</span>";
+        $("hazard-banner").hidden = true;
+        renderHereCard();
+    }
+    function startFollow(quiet) {
+        if (watchId !== null || !navigator.geolocation) return;
+        const btn = $("locate-btn");
         btn.setAttribute("aria-pressed", "true"); btn.innerHTML = svg("locate") + "<span>Following you</span>";
         followMe = true;
         watchId = navigator.geolocation.watchPosition(onPosition, err => {
-            toast(err.code === 1 ? "Location permission denied. Enable it in your browser settings." : "Couldn't get your location.");
-            navigator.geolocation.clearWatch(watchId); watchId = null;
-            btn.setAttribute("aria-pressed", "false"); btn.innerHTML = svg("locate") + "<span>Locate me</span>";
+            if (!quiet) toast(err.code === 1 ? "Location permission denied. Enable it in your browser settings." : "Couldn't get your location.");
+            stopFollow();
         }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 });
+    }
+    $("locate-btn").addEventListener("click", () => {
+        if (watchId !== null) stopFollow();
+        else if (!navigator.geolocation) toast("Location isn't available in this browser.");
+        else startFollow(false);
     });
+    if (navigator.permissions && navigator.permissions.query) {
+        navigator.permissions.query({ name: "geolocation" }).then(p => { if (p.state === "granted") startFollow(true); }).catch(() => {});
+    }
     if (map) map.on("dragstart", () => { followMe = false; });
 
     // ======================================================================
@@ -2099,6 +2141,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         drawStudyLayer();
         updateMapFooter();
         if (state.myPos) updateHazardBanner(state.myPos);
+        renderHereCard();
     }
 
     // Launch moment: the crossing lights flash, then the app settles in once.

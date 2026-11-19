@@ -530,6 +530,15 @@
         eq(MP.libraryCrowd("n/a"), null);
         eq(MP.libraryCrowd(-5), null);
     });
+    test("At a crossing: the nearest one within 180 m, and nothing farther", () => {
+        const cooper = { id: "cooper", name: "Cooper St", lat: 32.73, lng: -97.11, state: "confirmed" };
+        const center = { id: "center", name: "Center St", lat: 32.7312, lng: -97.11, state: "clear" };
+        const here = MP.crossingAsk({ lat: 32.7304, lng: -97.11 }, [cooper, center], MP.AT_CROSSING_M);
+        eq(here.id, "cooper");
+        assert(here.meters <= 180, String(here.meters));
+        eq(MP.crossingAsk({ lat: 32.74, lng: -97.11 }, [cooper], MP.AT_CROSSING_M), null);
+        eq(MP.crossingAsk(null, [cooper], 180), null);
+    });
     test("Library day bars mark now and the busiest hour, and ignore yesterday", () => {
         const now = CT("2026-11-16T14:10:00");
         const samples = [
