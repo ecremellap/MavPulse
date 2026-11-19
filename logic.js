@@ -783,6 +783,51 @@
         return lead >= 0 && lead <= 45 * MINUTE;
     }
 
+    // Alerts worth sending when the app is fully closed. One reporter never
+    // qualifies. Quiet mode gets severe weather only.
+    const CROSSING_NAMES = {
+        bowen: "Bowen Rd", davis: "Davis Dr", cooper: "Cooper St",
+        center: "Center St", mesquite: "Mesquite St", collins: "Collins St"
+    };
+    function closedAppAlerts(reports, alerts, now) {
+        const events = [];
+        const list = reports || [];
+        const ids = [];
+        list.forEach(r => { if (r && r.type === "crossing" && ids.indexOf(r.targetId) === -1) ids.push(r.targetId); });
+        ids.forEach(id => {
+            const st = crossingState(list, id, now);
+            if (st.state !== "confirmed") return;
+            const name = CROSSING_NAMES[id] || id;
+            events.push({
+                key: `x-${id}-${st.since}`,
+                modes: ["commuter"],
+                title: `Train blocking ${name}`,
+                body: "Confirmed by two commuters.",
+                url: `./?detour=${id}`
+            });
+        });
+        activeClosures(list, now).forEach(c => {
+            events.push({
+                key: `c-${c.targetId}-${c.kind}-${Math.floor(c.at / (30 * MINUTE))}`,
+                modes: ["commuter"],
+                title: `Closure: ${c.label || "campus"}`,
+                body: "Reported by a commuter on MavPulse.",
+                url: "./"
+            });
+        });
+        (alerts || []).forEach(a => {
+            if (!a || (a.severity !== "Severe" && a.severity !== "Extreme")) return;
+            events.push({
+                key: "wx-" + (a.id || a.event),
+                modes: ["commuter", "quiet"],
+                title: a.event || "Severe weather",
+                body: "National Weather Service alert near campus.",
+                url: "./"
+            });
+        });
+        return events;
+    }
+
     // Hand the mapped detour to a maps app. Miles and minutes come from the
     // route length at about 20 mph, not from live traffic.
     function detourHandoff(detour) {
@@ -807,7 +852,7 @@
         activeRoadWork, crimeCategory, summarizeCrime, nearbyHazards, crossingAsk, AT_CROSSING_M, commuterBar, shouldPostLockNote,
         TRAIN_REACH_M, spreadTrain, decodePolyline, parseTripShotRoute,
         LEADERBOARD_WINDOW_MS, isUtaEmail, isAccountEmail, profileIsUta, cleanDisplayName, weeklyLeaderboard,
-        defaultCommute, cleanCommute, crossingPattern, typicalBlockMinutes, shouldAlertBefore, detourHandoff, PATTERN_MIN_REPORTS,
+        defaultCommute, cleanCommute, crossingPattern, typicalBlockMinutes, shouldAlertBefore, closedAppAlerts, detourHandoff, PATTERN_MIN_REPORTS,
         leaderboard, SEMESTER_WINDOW_MS, reporterAccuracy, ACCURACY_MIN_CHECKED, chicagoParts, parseClock, libraryToday, libraryCrowd, libraryDayBars, CENTRAL_LIBRARY_GAUGE_MAX, inviteText, usualHoursToday
     };
     root.MP = LOGIC;

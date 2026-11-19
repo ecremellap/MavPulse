@@ -3,7 +3,7 @@
  * shell open offline. External services and map tiles still need a network;
  * the app separately saves a snapshot of recent campus data on the device.
  */
-const CACHE = "mavpulse-v36";
+const CACHE = "mavpulse-v37";
 const SHELL = [
   "./", "./index.html", "./style.css", "./script.js", "./logic.js", "./data.js", "./store.js", "./citydata.js", "./libraries.js", "./parking-areas.js", "./detours.js",
   "./firebase-config.js", "./manifest.webmanifest", "./vendor/leaflet/leaflet.js", "./vendor/leaflet/leaflet.css",
@@ -42,6 +42,17 @@ self.addEventListener("fetch", e => {
       });
     }
   })());
+});
+self.addEventListener("push", event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = { title: "MavPulse", body: event.data ? event.data.text() : "" }; }
+  event.waitUntil(self.registration.showNotification(data.title || "MavPulse", {
+    body: data.body || "",
+    icon: "icons/icon-192.png",
+    tag: data.tag || "mavpulse-push",
+    renotify: false,
+    data: { url: data.url || "./" }
+  }));
 });
 self.addEventListener("notificationclick", e => {
   e.notification.close();

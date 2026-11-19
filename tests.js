@@ -460,6 +460,18 @@
         eq(MP.shouldAlertBefore(commute, { id: "davis", state: "confirmed" }, at(8, 30)), false);
         eq(MP.shouldAlertBefore({ ...commute, alertBefore: false }, { id: "cooper", state: "confirmed" }, at(8, 30)), false);
     });
+    test("Closed-app alerts: confirmed trains and severe weather only", () => {
+        const now = min(10);
+        eq(MP.closedAppAlerts([block("cooper", "a", 0)], [], now).length, 0);
+        const hit = MP.closedAppAlerts([block("cooper", "a", 0), block("cooper", "b", 2)], [], now);
+        eq(hit.length, 1);
+        eq(hit[0].title, "Train blocking Cooper St");
+        eq(hit[0].modes.join(","), "commuter");
+        const wx = MP.closedAppAlerts([], [{ id: "nws-1", event: "Tornado Warning", severity: "Extreme" }], now);
+        eq(wx.length, 1);
+        eq(wx[0].modes.join(","), "commuter,quiet");
+        eq(MP.closedAppAlerts([], [{ id: "nws-2", event: "Frost Advisory", severity: "Minor" }], now).length, 0);
+    });
     test("Commuter bar: blocked names the open path, clear stays quiet and green", () => {
         const blocked = MP.commuterBar({ mode: "commuter", crossings: [{ id: "cooper", name: "Cooper St", state: "confirmed" }, { id: "center", name: "Center St", state: "likely" }], closures: [] });
         eq(blocked.level, "bad");

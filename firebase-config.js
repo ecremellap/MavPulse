@@ -18,3 +18,9 @@ window.MAVPULSE_FIREBASE_CONFIG = {
  * null = show the schedule and link to TripShot instead.
  */
 window.MAVPULSE_SHUTTLE_RELAY = "https://mavpulse-relay.kanishkarraam-manoj2004.workers.dev";
+
+/*
+ * Public half of the key the relay uses to send alerts after the app is
+ * closed. The private half is a Cloudflare secret, not in this file.
+ */
+window.MAVPULSE_VAPID_PUBLIC = "BEBqZlpBMJoYTcH1pbmFNFEqIidIXWw2FoAx8Bamm7JEb6RCqCqYCJLYCYo8UOfNMYxGTTpA1jV7zBX0slfuK18";
